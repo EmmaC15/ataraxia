@@ -7,9 +7,8 @@ API_KEY = os.getenv("WLT_API_KEY")
 BASE_URL = "https://api.worldlabs.ai"
 
 # Modèle rapide pour les tests et la démo live (30-45 sec environ).
-# Passer à "Marble 0.1-plus" seulement si vous testez la qualité en dehors
-# du live, car c'est nettement plus lent.
-MODEL = "Marble 0.1-mini"
+# Nom confirmé par un vrai appel API (22/09/2026) : "marble-1.0-draft"
+MODEL = "marble-1.0-draft"
 
 # Intervalle et durée max de polling pendant l'attente de génération
 POLL_INTERVAL_SECONDS = 3

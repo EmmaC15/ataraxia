@@ -1,5 +1,9 @@
 requests
 python-dotenv
 faster-whisper
+numpy
 sounddevice
 flask
+groq
+gTTS
+playsound==1.2.2

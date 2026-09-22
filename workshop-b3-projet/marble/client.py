@@ -75,12 +75,27 @@ def generer_monde(description: str) -> str | None:
             print(f"[Marble] Erreur de génération : {resultat['error']}")
             return None
 
-        # NOTE : à ajuster une fois le premier appel réel testé — la structure
-        # exacte de "response" (où se trouve l'URL VR) doit être vérifiée
-        # avec un vrai retour d'API lors du premier test.
         world = resultat.get("response", {})
-        return world.get("vr_url") or world.get("world_url")
+        url = world.get("world_marble_url")
+
+        if not url:
+            # Ne devrait normalement pas arriver — on affiche tout pour comprendre.
+            print("[Marble] Pas d'URL trouvée dans la réponse. Réponse complète :")
+            print(resultat)
+            return None
+
+        return url
+
+    except requests.HTTPError as e:
+        # Cas fréquent : 402 = crédits insuffisants, 401/403 = clé invalide.
+        print(f"[Marble] Erreur HTTP {e.response.status_code} : {e.response.text}")
+        return None
 
     except (requests.RequestException, TimeoutError) as e:
-        print(f"[Marble] Échec génération : {e}")
+        print(f"[Marble] Échec génération (réseau/timeout) : {e}")
+        return None
+
+    except Exception as e:
+        # Filet de sécurité : on ne veut plus jamais d'échec silencieux.
+        print(f"[Marble] Erreur inattendue ({type(e).__name__}) : {e}")
         return None
