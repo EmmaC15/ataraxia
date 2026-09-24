@@ -1,0 +1,506 @@
+// Ataraxia — frontend web (vanilla JS)
+// - Écoute automatique (VAD) : après la voix du psy, on capte tout de suite.
+// - Bouton "reformule" pour demander au psy de rephraser sa dernière question.
+// - Position "assis / couché" en haut à droite.
+// - Trois phases sur l'écran monde : révélation → yeux fermés (respiration) → yeux ouverts.
+
+const THEME_LABELS = {
+  anxiete: "Anxiété",
+  stress:  "Stress",
+  humeur:  "Humeur",
+  sommeil: "Sommeil",
+  estime:  "Estime de soi",
+};
+
+const state = {
+  sessionId: null,
+  worldId: null,
+  totalTurns: 10,
+  recorder: null,
+  chunks: [],
+  recording: false,
+  currentAudio: null,
+  vad: null,             // objet {cleanup, stopRecorder} pendant l'écoute auto
+  pollingStarted: false,
+  posture: "assis",      // "assis" | "couche"
+};
+
+const screens = {
+  theme:   document.getElementById("screen-theme"),
+  session: document.getElementById("screen-session"),
+  world:   document.getElementById("screen-world"),
+};
+
+function showScreen(name) {
+  for (const s of Object.values(screens)) s.classList.remove("active");
+  screens[name].classList.add("active");
+}
+
+function setPhase(phase) {
+  document.getElementById("stage").setAttribute("data-phase", phase);
+  document.body.classList.toggle("eyes-closed", phase === "closed");
+}
+
+// ---------- Posture (assis / couché) ----------
+
+function setPosture(pos) {
+  state.posture = pos;
+  document.body.classList.remove("pos-assis", "pos-couche");
+  document.body.classList.add(pos === "couche" ? "pos-couche" : "pos-assis");
+  document.querySelectorAll(".posture-btn").forEach(b => {
+    b.classList.toggle("active", b.dataset.pos === pos);
+  });
+}
+
+document.querySelectorAll(".posture-btn").forEach(btn => {
+  btn.addEventListener("click", () => setPosture(btn.dataset.pos));
+});
+
+// ---------- Écran 1 : thèmes ----------
+
+async function initThemes() {
+  const r = await fetch("/api/themes");
+  const data = await r.json();
+  state.totalTurns = data.total_turns;
+  buildProgress(state.totalTurns);
+
+  const list = document.getElementById("themes-list");
+  list.innerHTML = "";
+  for (const t of data.themes) {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.className = "theme-btn";
+    btn.type = "button";
+    btn.innerHTML = `<span>${THEME_LABELS[t] || t}</span><span class="arrow">→</span>`;
+    btn.addEventListener("click", () => startSession(t));
+    li.appendChild(btn);
+    list.appendChild(li);
+  }
+}
+
+async function startSession(theme) {
+  const r = await fetch("/api/session/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ theme }),
+  });
+  if (!r.ok) { alert("Impossible de démarrer la séance."); return; }
+  const data = await r.json();
+  state.sessionId = data.session_id;
+  showScreen("session");
+  updateProgress(0);
+  displayPsy(data.psy_text, data.psy_audio_b64);
+}
+
+// ---------- Progress dots ----------
+
+function buildProgress(n) {
+  const wrap = document.getElementById("progress");
+  wrap.innerHTML = "";
+  for (let i = 0; i < n; i++) {
+    const d = document.createElement("span");
+    d.className = "dot";
+    wrap.appendChild(d);
+  }
+}
+
+function updateProgress(current) {
+  const dots = document.querySelectorAll("#progress .dot");
+  dots.forEach((d, i) => {
+    d.classList.remove("done", "current");
+    if (i < current) d.classList.add("done");
+    else if (i === current) d.classList.add("current");
+  });
+}
+
+// ---------- Voix : lecture audio en base64, chaînable via callback ----------
+
+function setCompagnonSpeaking(on) {
+  document.body.classList.toggle("compagnon-speaking", !!on);
+}
+
+function playAudioB64(b64, onEnded) {
+  if (state.currentAudio) {
+    try { state.currentAudio.pause(); } catch (_) {}
+    state.currentAudio = null;
+  }
+  setCompagnonSpeaking(false);
+  if (!b64) { if (onEnded) onEnded(); return; }
+  const audio = new Audio("data:audio/mp3;base64," + b64);
+  state.currentAudio = audio;
+  const finish = () => {
+    setCompagnonSpeaking(false);
+    if (onEnded) onEnded();
+  };
+  audio.onended = finish;
+  audio.onerror = finish;
+  audio.onplay = () => setCompagnonSpeaking(true);
+  audio.play().catch(err => {
+    console.warn("Lecture bloquée :", err);
+    finish();
+  });
+}
+
+function displayPsy(text, audioB64, onAudioEnded) {
+  const cap = document.getElementById("psy-text");
+  if (cap) cap.textContent = text || "";
+  document.getElementById("reformulate-btn").hidden = false;
+  setHint("le compagnon parle…");
+  playAudioB64(audioB64, () => {
+    if (onAudioEnded) onAudioEnded();
+    else if (screens.session.classList.contains("active")) {
+      // Défaut : après que le psy a fini, écoute auto.
+      startAutoListen();
+    }
+  });
+}
+
+function setHint(text) { document.getElementById("mic-hint").textContent = text; }
+
+function displaySentiment(sentiment) {
+  const el = document.getElementById("sentiment");
+  if (!sentiment) { el.hidden = true; return; }
+  const emo = sentiment.emotion_principale || "";
+  const alert = sentiment.alerte_detresse === true;
+  el.hidden = !emo;
+  el.textContent = alert
+    ? "signal de détresse détecté — pense au 3114"
+    : `perçu : ${emo}`;
+  el.classList.toggle("alert", alert);
+}
+
+// ---------- Écoute automatique (VAD par RMS) ----------
+
+const SPEAK_THRESHOLD = 0.015;   // RMS au-dessus duquel on considère "parole"
+const SILENCE_MS      = 1500;    // silence continu qui déclenche l'envoi
+const MIN_SPEAK_MS    = 400;     // durée minimale de parole avant de pouvoir couper
+const MAX_MS          = 60000;   // sécurité : coupe à 60 s max
+const CHECK_MS        = 100;
+
+const micBtn = document.getElementById("mic-btn");
+micBtn.addEventListener("click", () => {
+  // Le bouton mic sert d'interrupteur manuel (rare : override du VAD).
+  if (state.recording) {
+    stopRecording();
+  } else {
+    startAutoListen();
+  }
+});
+
+async function startAutoListen() {
+  if (state.recording) return;
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) {
+    setHint("accès au micro refusé — clique le micro pour réessayer");
+    return;
+  }
+
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const source = audioCtx.createMediaStreamSource(stream);
+  const analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 512;
+  source.connect(analyser);
+
+  const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+    ? "audio/webm;codecs=opus"
+    : "audio/webm";
+  const recorder = new MediaRecorder(stream, { mimeType });
+  const chunks = [];
+  recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+
+  state.recorder = recorder;
+  state.chunks = chunks;
+  state.recording = true;
+  micBtn.classList.add("recording");
+  setHint("je t'écoute…");
+
+  const dataArray = new Float32Array(analyser.fftSize);
+  let hasSpoken = false;
+  let speakStart = null;
+  let silentSince = null;
+  const startTime = Date.now();
+
+  const cleanup = () => {
+    try { clearInterval(interval); } catch (_) {}
+    try { stream.getTracks().forEach(t => t.stop()); } catch (_) {}
+    try { audioCtx.close(); } catch (_) {}
+    state.vad = null;
+  };
+
+  const interval = setInterval(() => {
+    analyser.getFloatTimeDomainData(dataArray);
+    let sum = 0;
+    for (let i = 0; i < dataArray.length; i++) sum += dataArray[i] * dataArray[i];
+    const rms = Math.sqrt(sum / dataArray.length);
+
+    const now = Date.now();
+    if (rms > SPEAK_THRESHOLD) {
+      if (!hasSpoken) { hasSpoken = true; speakStart = now; }
+      silentSince = null;
+    } else if (hasSpoken) {
+      if (!silentSince) silentSince = now;
+      else if (now - silentSince > SILENCE_MS && now - speakStart > MIN_SPEAK_MS) {
+        cleanup();
+        try { recorder.stop(); } catch (_) {}
+      }
+    }
+    if (now - startTime > MAX_MS) {
+      cleanup();
+      try { recorder.stop(); } catch (_) {}
+    }
+  }, CHECK_MS);
+
+  recorder.onstop = async () => {
+    cleanup();
+    micBtn.classList.remove("recording");
+    micBtn.classList.add("pending");
+    state.recording = false;
+    if (!hasSpoken) {
+      setHint("je n'ai rien entendu, clique le micro pour réessayer");
+      micBtn.classList.remove("pending");
+      return;
+    }
+    setHint("un instant…");
+    const blob = new Blob(chunks, { type: mimeType });
+    await sendTurn(blob);
+    micBtn.classList.remove("pending");
+  };
+
+  state.vad = { cleanup, stopRecorder: () => { try { recorder.stop(); } catch (_) {} } };
+
+  recorder.start(200);
+}
+
+function stopRecording() {
+  if (state.vad) {
+    state.vad.cleanup();
+    state.vad.stopRecorder();
+  } else if (state.recorder) {
+    try { state.recorder.stop(); } catch (_) {}
+  }
+}
+
+// ---------- Envoi du tour ----------
+
+async function sendTurn(blob) {
+  const fd = new FormData();
+  fd.append("audio", blob, "user.webm");
+
+  let r;
+  try {
+    r = await fetch(`/api/session/${state.sessionId}/turn`, { method: "POST", body: fd });
+  } catch (e) { setHint("problème réseau — clique le micro pour réessayer"); return; }
+  if (!r.ok) { setHint("le serveur n'a pas pu traiter — clique le micro"); return; }
+  const data = await r.json();
+
+  document.getElementById("user-text").textContent = data.user_text || "…";
+  displaySentiment(data.sentiment);
+  updateProgress(data.turn);
+
+  if (data.empty) {
+    setHint("je ne t'ai pas entendu, clique le micro pour reparler");
+    return;
+  }
+
+  if (data.is_finished) {
+    document.getElementById("reformulate-btn").hidden = true;
+    setHint("merci. ton monde apaisant se dessine…");
+    await finishSession();
+    return;
+  }
+
+  displayPsy(data.psy_text, data.psy_audio_b64);
+}
+
+// ---------- Reformulation ----------
+
+document.getElementById("reformulate-btn").addEventListener("click", async () => {
+  // Coupe une écoute en cours pour ne pas envoyer un tour vide.
+  if (state.recording) stopRecording();
+  document.getElementById("reformulate-btn").disabled = true;
+  setHint("le compagnon cherche d'autres mots…");
+  try {
+    const r = await fetch(`/api/session/${state.sessionId}/reformulate`, { method: "POST" });
+    if (!r.ok) throw new Error("http " + r.status);
+    const data = await r.json();
+    displayPsy(data.psy_text, data.psy_audio_b64);
+  } catch (e) {
+    setHint("je n'ai pas pu reformuler — clique le micro pour continuer");
+  } finally {
+    document.getElementById("reformulate-btn").disabled = false;
+  }
+});
+
+// ---------- Fin de séance : révélation → yeux fermés → yeux ouverts ----------
+
+async function finishSession() {
+  let r;
+  try {
+    r = await fetch(`/api/session/${state.sessionId}/finish`, { method: "POST" });
+  } catch (e) { alert("Erreur pendant la génération du monde."); return; }
+  if (!r.ok) {
+    let payload = null;
+    try { payload = await r.json(); } catch (_) { payload = null; }
+    const detail = payload && payload.detail;
+    const code = detail && typeof detail === "object" ? detail.code : null;
+    const msg =
+      (detail && typeof detail === "object" && detail.message) ||
+      (typeof detail === "string" ? detail : null) ||
+      "Le serveur n'a pas pu créer le monde.";
+    console.error("Finish error", r.status, payload);
+    if (code === "marble_out_of_credits") {
+      showWorldError(
+        "Crédits Marble épuisés",
+        msg,
+        "https://platform.worldlabs.ai/billing"
+      );
+    } else if (code === "marble_api_error") {
+      showWorldError("Marble a refusé la génération", msg, null);
+    } else {
+      alert(msg);
+    }
+    return;
+  }
+  const w = await r.json();
+  state.worldId = w.world_id;
+
+  showScreen("world");
+  setPhase("reveal");
+  document.getElementById("world-desc").textContent = w.description || "";
+  renderDetails(w.details || {});
+
+  const closeB64 = w.audio && w.audio.close_b64;
+  const descB64 = w.audio && w.audio.description_b64;
+
+  playAudioB64(descB64, () => {
+    goToClosedPhase(closeB64, w.stub_mode, w.status, w.viewer_url, null);
+  });
+}
+
+function goToClosedPhase(closeAudioB64, stubMode, initialStatus, initialViewerUrl, initialThumb) {
+  setPhase("closed");
+  document.getElementById("close-status").textContent = "génération en cours…";
+  playAudioB64(closeAudioB64);
+
+  if (stubMode) {
+    document.getElementById("close-status").textContent = "mode démo — aucune génération réelle";
+    setTimeout(() => goToOpenPhase(null, null, null), 4000);
+    return;
+  }
+  if (initialStatus === "ready" && initialViewerUrl) {
+    setTimeout(() => goToOpenPhase(initialViewerUrl, initialThumb, null), 6000);
+    return;
+  }
+  pollWorld();
+}
+
+const POLL_INTERVAL_MS = 12000;
+const POLL_MAX_MS = 8 * 60 * 1000;
+
+async function pollWorld() {
+  if (state.pollingStarted) return;
+  state.pollingStarted = true;
+  const start = Date.now();
+
+  while (Date.now() - start < POLL_MAX_MS) {
+    await new Promise(res => setTimeout(res, POLL_INTERVAL_MS));
+    let r;
+    try { r = await fetch(`/api/world/${state.worldId}/status`); } catch (e) { continue; }
+    if (!r.ok) continue;
+    const s = await r.json();
+
+    const elapsed = Math.round((Date.now() - start) / 1000);
+    document.getElementById("close-status").textContent = `respire… ${elapsed}s`;
+
+    if (s.status === "ready" && s.viewer_url) {
+      const openB64 = s.audio && s.audio.open_b64;
+      goToOpenPhase(s.viewer_url, s.thumbnail_url, openB64);
+      state.pollingStarted = false;
+      return;
+    }
+    if (s.status === "failed") {
+      document.getElementById("close-status").textContent =
+        "quelque chose s'est mis en travers — réessaie plus tard";
+      state.pollingStarted = false;
+      return;
+    }
+  }
+  document.getElementById("close-status").textContent =
+    "l'attente dépasse 8 min — vérifie ton compte Marble";
+  state.pollingStarted = false;
+}
+
+function showWorldError(title, message, refillUrl) {
+  showScreen("world");
+  setPhase("closed");
+  const el = document.getElementById("close-status");
+  if (el) {
+    el.innerHTML = "";
+    const strong = document.createElement("strong");
+    strong.textContent = title;
+    const p = document.createElement("p");
+    p.textContent = message;
+    el.appendChild(strong);
+    el.appendChild(p);
+    if (refillUrl) {
+      const a = document.createElement("a");
+      a.href = refillUrl;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = "Recharger le compte World Labs";
+      el.appendChild(a);
+    }
+  }
+}
+
+function goToOpenPhase(viewerUrl, thumbnailUrl, openAudioB64) {
+  setPhase("open");
+  const thumb = document.getElementById("world-thumb");
+  if (thumbnailUrl) { thumb.src = thumbnailUrl; thumb.hidden = false; }
+  else { thumb.hidden = true; }
+  const enter = document.getElementById("world-enter");
+  if (viewerUrl) { enter.href = viewerUrl; enter.hidden = false; }
+  else { enter.hidden = true; }
+  playAudioB64(openAudioB64);
+}
+
+function renderDetails(details) {
+  const dl = document.getElementById("world-details");
+  dl.innerHTML = "";
+  const order = [
+    "lieu_type", "moment", "meteo",
+    "temperature_ressentie", "ambiance_emotionnelle",
+    "couleurs_dominantes", "elements_visuels",
+    "sons_ambiants", "odeurs", "mots_cles_marble",
+  ];
+  const seen = new Set();
+  const push = (k, v) => {
+    seen.add(k);
+    const dt = document.createElement("dt");
+    dt.textContent = k.replace(/_/g, " ");
+    const dd = document.createElement("dd");
+    dd.textContent = Array.isArray(v) ? v.join(", ") : String(v);
+    dl.appendChild(dt); dl.appendChild(dd);
+  };
+  for (const k of order) if (k in details) push(k, details[k]);
+  for (const k of Object.keys(details)) if (!seen.has(k)) push(k, details[k]);
+}
+
+// ---------- Restart ----------
+
+document.getElementById("restart-btn").addEventListener("click", () => {
+  state.sessionId = null;
+  state.worldId = null;
+  state.pollingStarted = false;
+  document.body.classList.remove("eyes-closed");
+  document.getElementById("user-text").textContent = "—";
+  document.getElementById("sentiment").hidden = true;
+  document.getElementById("reformulate-btn").hidden = true;
+  showScreen("theme");
+});
+
+// ---------- Boot ----------
+
+initThemes();

@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Ataraxia</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..600,0..100&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="pos-assis">
+
+  <!-- ============ Scène : salon, cheminée avec feu de bois, canapé + compagnon ============ -->
+  <div class="scene" aria-hidden="true">
+    <svg class="scene-svg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMax slice">
+      <defs>
+        <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0"    stop-color="#3d2a1a"/>
+          <stop offset="0.6"  stop-color="#4a3220"/>
+          <stop offset="1"    stop-color="#5a3d28"/>
+        </linearGradient>
+        <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#7a4b2f"/>
+          <stop offset="1" stop-color="#3a220f"/>
+        </linearGradient>
+        <linearGradient id="stone" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0"    stop-color="#6a5340"/>
+          <stop offset="0.5"  stop-color="#8a6a50"/>
+          <stop offset="1"    stop-color="#5a4230"/>
+        </linearGradient>
+        <linearGradient id="sofaBack" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#a06848"/>
+          <stop offset="1" stop-color="#6a3f28"/>
+        </linearGradient>
+        <linearGradient id="cushion" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#c68c62"/>
+          <stop offset="1" stop-color="#8a5638"/>
+        </linearGradient>
+        <linearGradient id="blanket" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#d17b5c"/>
+          <stop offset="1" stop-color="#a05a3a"/>
+        </linearGradient>
+        <linearGradient id="rug" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0"   stop-color="#8a4a2a" stop-opacity="0"/>
+          <stop offset="0.5" stop-color="#9a5a35" stop-opacity="0.85"/>
+          <stop offset="1"   stop-color="#8a4a2a" stop-opacity="0"/>
+        </linearGradient>
+        <linearGradient id="sweater" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#c98a5c"/>
+          <stop offset="1" stop-color="#8a5236"/>
+        </linearGradient>
+        <linearGradient id="lap" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#e88e6c"/>
+          <stop offset="1" stop-color="#b0603c"/>
+        </linearGradient>
+        <radialGradient id="fireGlow" cx="0.28" cy="0.62" r="0.55">
+          <stop offset="0"    stop-color="#ffd08a" stop-opacity="0.85"/>
+          <stop offset="0.35" stop-color="#e78436" stop-opacity="0.45"/>
+          <stop offset="1"    stop-color="#5a2610" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="lampGlow" cx="0.9" cy="0.1" r="0.35">
+          <stop offset="0" stop-color="#f9d68a" stop-opacity="0.35"/>
+          <stop offset="1" stop-color="#f9d68a" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="ember" cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0"   stop-color="#ffb060"/>
+          <stop offset="0.6" stop-color="#e05a20" stop-opacity="0.6"/>
+          <stop offset="1"   stop-color="#8a2a08" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="skinShade" cx="0.5" cy="0.4" r="0.6">
+          <stop offset="0" stop-color="#f0cea2"/>
+          <stop offset="1" stop-color="#c99770"/>
+        </radialGradient>
+        <filter id="softBlur"><feGaussianBlur stdDeviation="2.4"/></filter>
+        <filter id="strongBlur"><feGaussianBlur stdDeviation="10"/></filter>
+      </defs>
+
+      <!-- Mur -->
+      <rect x="0" y="0" width="1200" height="800" fill="url(#wall)"/>
+      <rect x="0" y="0" width="1200" height="800" fill="url(#lampGlow)"/>
+
+      <!-- Sol -->
+      <path d="M0 540 L1200 540 L1200 800 L0 800 Z" fill="url(#floor)"/>
+      <g stroke="#2a1608" stroke-width="1" opacity="0.35">
+        <line x1="80"   y1="560" x2="140"  y2="800"/>
+        <line x1="240"  y1="560" x2="300"  y2="800"/>
+        <line x1="410"  y1="560" x2="460"  y2="800"/>
+        <line x1="590"  y1="560" x2="620"  y2="800"/>
+        <line x1="770"  y1="560" x2="790"  y2="800"/>
+        <line x1="940"  y1="560" x2="950"  y2="800"/>
+        <line x1="1100" y1="560" x2="1105" y2="800"/>
+      </g>
+
+      <!-- Halo chaud diffus autour de la cheminée -->
+      <ellipse cx="360" cy="470" rx="820" ry="600" fill="url(#fireGlow)"/>
+      <!-- Tapis -->
+      <ellipse cx="620" cy="720" rx="580" ry="55" fill="url(#rug)"/>
+
+      <!-- ==================== CHEMINÉE ==================== -->
+      <rect x="210" y="185" width="410" height="34" rx="4" fill="url(#stone)" stroke="#1e1208" stroke-width="1"/>
+      <path d="M240 219 L590 219 L590 555 L240 555 Z" fill="url(#stone)"/>
+      <g stroke="#2f2010" stroke-width="1" opacity="0.5">
+        <line x1="240" y1="290" x2="590" y2="290"/>
+        <line x1="240" y1="370" x2="590" y2="370"/>
+        <line x1="240" y1="450" x2="590" y2="450"/>
+      </g>
+      <path d="M300 260 L530 260 L530 540 L300 540 Z" fill="#08040a"/>
+      <rect x="215" y="545" width="400" height="26" fill="#2a1a10"/>
+
+      <ellipse cx="410" cy="510" rx="90" ry="14" fill="#3a2010"/>
+      <ellipse cx="375" cy="486" rx="70" ry="11" fill="#2c1608" transform="rotate(-6 375 486)"/>
+      <ellipse cx="440" cy="484" rx="60" ry="10" fill="#2c1608" transform="rotate(4 440 484)"/>
+      <ellipse cx="410" cy="470" rx="55" ry="9"  fill="#1e0f06"/>
+      <ellipse cx="410" cy="515" rx="80" ry="14" fill="url(#ember)" filter="url(#softBlur)"/>
+      <ellipse cx="410" cy="520" rx="55" ry="10" fill="#ff8a3a" opacity="0.7" filter="url(#softBlur)"/>
+
+      <g class="flames" filter="url(#softBlur)">
+        <path fill="#ffcf7a">
+          <animate attributeName="d" dur="1.1s" repeatCount="indefinite"
+            values="M355 490 Q378 415 405 490 Z;M355 490 Q380 405 405 490 Z;M355 490 Q375 425 405 490 Z;M355 490 Q378 415 405 490 Z"/>
+        </path>
+        <path fill="#f8a34a">
+          <animate attributeName="d" dur="1.5s" repeatCount="indefinite"
+            values="M395 490 Q425 380 460 490 Z;M395 490 Q432 360 460 490 Z;M395 490 Q420 395 460 490 Z;M395 490 Q425 380 460 490 Z"/>
+        </path>
+        <path fill="#ffcf7a">
+          <animate attributeName="d" dur="1.3s" repeatCount="indefinite"
+            values="M445 490 Q465 420 490 490 Z;M445 490 Q470 410 490 490 Z;M445 490 Q463 430 490 490 Z;M445 490 Q465 420 490 490 Z"/>
+        </path>
+        <path fill="#ff7a2a" opacity="0.85">
+          <animate attributeName="d" dur="0.9s" repeatCount="indefinite"
+            values="M400 490 Q415 460 430 490 Z;M400 490 Q415 445 430 490 Z;M400 490 Q415 465 430 490 Z;M400 490 Q415 460 430 490 Z"/>
+        </path>
+      </g>
+      <ellipse cx="415" cy="440" rx="130" ry="80" fill="#ff9a48" opacity="0.35" filter="url(#strongBlur)">
+        <animate attributeName="opacity" values="0.25;0.42;0.25" dur="2.4s" repeatCount="indefinite"/>
+      </ellipse>
+
+      <!-- Bougie sur le manteau -->
+      <rect x="380" y="150" width="10" height="36" fill="#e8d4a8"/>
+      <ellipse cx="385" cy="150" rx="4" ry="8" fill="#ffcf7a" filter="url(#softBlur)">
+        <animate attributeName="ry" values="7;9;7" dur="1.6s" repeatCount="indefinite"/>
+      </ellipse>
+
+      <!-- ==================== CANAPÉ ==================== -->
+      <path d="M700 370 Q690 355 720 355 L1150 355 Q1180 355 1170 370 L1170 500 L700 500 Z" fill="url(#sofaBack)"/>
+      <path d="M735 385 L930 385 L930 495 L735 495 Z" fill="#b5764f" opacity="0.85"/>
+      <path d="M950 385 L1150 385 L1150 495 L950 495 Z" fill="#b5764f" opacity="0.85"/>
+      <path d="M680 500 L1200 500 L1200 620 L680 620 Z" fill="url(#cushion)"/>
+      <line x1="940" y1="500" x2="940" y2="620" stroke="#5a3524" stroke-width="2" opacity="0.55"/>
+      <path d="M680 445 Q670 405 700 405 L730 405 L730 620 L680 620 Z" fill="#8a5638"/>
+      <path d="M1170 405 L1140 405 Q1120 405 1130 445 L1130 620 L1200 620 L1200 405 Z" fill="#8a5638"/>
+
+      <!-- ==================== COMPAGNON (assis sur le canapé, face au visiteur) ==================== -->
+      <g id="compagnon" transform="translate(830, 460)">
+
+        <!-- Léger halo autour de la silhouette (ambiance chaude) -->
+        <ellipse cx="0" cy="0" rx="180" ry="220" fill="#ffcf7a" opacity="0.10" filter="url(#strongBlur)"/>
+
+        <!-- Ombre au sol / sur l'assise -->
+        <ellipse cx="0" cy="160" rx="120" ry="12" fill="#2a1608" opacity="0.35"/>
+
+        <!-- Plaid sur les genoux -->
+        <path d="M-110 130 Q-30 118 90 132 Q100 190 -110 190 Z" fill="url(#lap)"/>
+        <g stroke="#7a3a28" stroke-width="1" opacity="0.7">
+          <line x1="-100" y1="150" x2="-95"  y2="185"/>
+          <line x1="-70"  y1="146" x2="-72"  y2="188"/>
+          <line x1="-40"  y1="142" x2="-38"  y2="188"/>
+          <line x1="-10"  y1="140" x2="-12"  y2="188"/>
+          <line x1="20"   y1="140" x2="22"   y2="188"/>
+          <line x1="50"   y1="144" x2="52"   y2="188"/>
+          <line x1="80"   y1="148" x2="82"   y2="187"/>
+        </g>
+
+        <!-- Torse (pull chaud, en col rond) -->
+        <path d="M-92 145 Q-100 25 -35 10 Q35 0 55 25 Q85 55 70 145 Z" fill="url(#sweater)"/>
+        <!-- Ombre du col -->
+        <path d="M-30 15 Q0 5 30 12 Q30 40 -25 40 Z" fill="#6a3e24" opacity="0.5"/>
+        <!-- Bras gauche -->
+        <path d="M-92 55 Q-115 100 -95 145 Q-80 155 -70 140 Q-88 105 -70 68 Z" fill="url(#sweater)"/>
+        <!-- Main gauche -->
+        <ellipse cx="-90" cy="135" rx="15" ry="11" fill="#d9a67c"/>
+        <!-- Bras droit -->
+        <path d="M65 55 Q95 100 75 145 Q60 155 50 140 Q68 105 45 68 Z" fill="url(#sweater)"/>
+        <ellipse cx="70" cy="135" rx="15" ry="11" fill="#d9a67c"/>
+
+        <!-- Cou -->
+        <path d="M-18 0 L18 0 L14 -20 L-14 -20 Z" fill="#c99770"/>
+
+        <!-- Tête -->
+        <ellipse cx="0" cy="-58" rx="46" ry="54" fill="url(#skinShade)"/>
+        <!-- Oreille -->
+        <ellipse cx="-42" cy="-52" rx="6" ry="10" fill="#c99770"/>
+        <ellipse cx="42"  cy="-52" rx="6" ry="10" fill="#c99770"/>
+
+        <!-- Cheveux (courts ondulés) -->
+        <path d="M-46 -78 Q-45 -110 -5 -114 Q35 -114 46 -85 Q52 -70 44 -70 Q38 -78 22 -80 Q-4 -84 -26 -80 Q-38 -78 -46 -78 Z" fill="#2c1608"/>
+
+        <!-- Sourcils très légers -->
+        <path d="M-24 -68 Q-16 -71 -10 -68" stroke="#2c1608" stroke-width="1.4" fill="none"/>
+        <path d="M10 -68 Q16 -71 24 -68" stroke="#2c1608" stroke-width="1.4" fill="none"/>
+
+        <!-- Yeux (courbes calmes, cligne parfois) -->
+        <g class="eyes">
+          <path class="eye eye-left"  d="M-24 -58 Q-16 -55 -8 -58" stroke="#2a1810" stroke-width="1.7" fill="none" stroke-linecap="round">
+            <animate attributeName="d" dur="6s" repeatCount="indefinite"
+              values="M-24 -58 Q-16 -55 -8 -58; M-24 -58 Q-16 -55 -8 -58; M-24 -58 Q-16 -58 -8 -58; M-24 -58 Q-16 -55 -8 -58"
+              keyTimes="0;0.93;0.965;1"/>
+          </path>
+          <path class="eye eye-right" d="M8 -58 Q16 -55 24 -58" stroke="#2a1810" stroke-width="1.7" fill="none" stroke-linecap="round">
+            <animate attributeName="d" dur="6s" repeatCount="indefinite"
+              values="M8 -58 Q16 -55 24 -58; M8 -58 Q16 -55 24 -58; M8 -58 Q16 -58 24 -58; M8 -58 Q16 -55 24 -58"
+              keyTimes="0;0.93;0.965;1"/>
+          </path>
+        </g>
+
+        <!-- Joues (soupçon de rose) -->
+        <ellipse cx="-28" cy="-38" rx="10" ry="5" fill="#e28460" opacity="0.35"/>
+        <ellipse cx="28"  cy="-38" rx="10" ry="5" fill="#e28460" opacity="0.35"/>
+
+        <!-- Bouche (arc doux quand fermée, s'ouvre quand ".speaking") -->
+        <path class="mouth" d="M-10 -32 Q0 -27 10 -32" stroke="#6a3524" stroke-width="1.8" fill="#4a2818" stroke-linecap="round"/>
+      </g>
+
+      <!-- Coussin déco (à côté du compagnon) -->
+      <ellipse cx="1080" cy="510" rx="55" ry="30" fill="#f2d5b0"/>
+
+      <!-- Vignetage bordure -->
+      <rect x="0" y="0" width="1200" height="800" fill="url(#vignette)" pointer-events="none"/>
+    </svg>
+    <div class="scene-veil"></div>
+  </div>
+
+  <!-- ============================ UI ============================ -->
+
+  <header class="topbar">
+    <span class="brand">ataraxia</span>
+    <div class="topbar-right">
+      <div class="posture" role="group" aria-label="Position">
+        <button class="posture-btn active" data-pos="assis" type="button">assis</button>
+        <button class="posture-btn"        data-pos="couche" type="button">couché</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Écran 1 : choix du thème -->
+    <section id="screen-theme" class="screen active card">
+      <p class="eyebrow">installe-toi confortablement</p>
+      <h1>De quoi as-tu besoin<br>d'être écouté aujourd'hui&nbsp;?</h1>
+      <p class="lede">Prends le temps qu'il te faut. Rien de ce qui est dit ne quitte cette pièce.</p>
+      <ul class="themes" id="themes-list"></ul>
+    </section>
+
+    <!-- Écran 2 : séance — pas de bulle de texte du psy, il est LÀ dans la scène -->
+    <section id="screen-session" class="screen card session-card">
+      <div class="progress" id="progress"></div>
+
+      <!-- Sous-titre discret de ce que dit le compagnon (accessibilité) -->
+      <p class="psy-caption" id="psy-text">…</p>
+      <button id="reformulate-btn" class="reformulate" type="button" hidden>
+        reformule autrement, s'il te plaît
+      </button>
+
+      <div class="mic-wrap">
+        <button id="mic-btn" class="mic" type="button" aria-label="Enregistrer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <rect x="9" y="3" width="6" height="12" rx="3"/>
+            <path d="M5 11a7 7 0 0 0 14 0"/>
+            <path d="M12 18v3"/>
+          </svg>
+        </button>
+        <p class="hint" id="mic-hint">un instant…</p>
+      </div>
+
+      <p class="user-caption" id="user-text">—</p>
+      <p class="sentiment" id="sentiment" hidden></p>
+    </section>
+
+    <!-- Écran 3 : monde apaisant en 3 phases -->
+    <section id="screen-world" class="screen card">
+      <div class="stage" id="stage" data-phase="reveal">
+
+        <div class="stage-reveal">
+          <p class="eyebrow">ton lieu apaisant</p>
+          <h2>Voici ce que ton esprit a dessiné</h2>
+          <blockquote class="world-desc" id="world-desc">…</blockquote>
+          <dl class="details" id="world-details"></dl>
+          <p class="stage-hint" id="reveal-hint">écoute-le, prends-le en toi…</p>
+        </div>
+
+        <div class="stage-closed">
+          <p class="close-invite" id="close-invite">Ferme les yeux un instant. Ton monde se prépare doucement.</p>
+          <div class="breathe" aria-hidden="true">
+            <div class="breathe-ring"></div>
+            <div class="breathe-core"></div>
+          </div>
+          <p class="close-status" id="close-status">génération en cours…</p>
+        </div>
+
+        <div class="stage-open">
+          <p class="eyebrow">ton monde est prêt</p>
+          <h2 id="open-heading">Tu peux ouvrir les yeux</h2>
+          <p class="open-invite" id="open-invite">Es-tu prêt à entrer dans ce nouveau monde ?</p>
+          <img id="world-thumb" class="world-thumb" alt="" hidden>
+          <a id="world-enter" class="world-enter" href="#" target="_blank" rel="noopener noreferrer">
+            Oui, j'y entre
+          </a>
+          <button id="restart-btn" class="restart" type="button">Commencer une autre séance</button>
+        </div>
+
+      </div>
+    </section>
+  </main>
+
+  <footer class="footlink">
+    en cas de détresse, contacte le <a href="tel:3114">3114</a> — écoute gratuite, 24 h/24.
+  </footer>
+
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

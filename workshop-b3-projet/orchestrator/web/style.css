@@ -1,0 +1,495 @@
+/* Ataraxia — Fraunces (serif variable) + Manrope (sans), scène salon + compagnon SVG. */
+
+:root {
+  --serif: "Fraunces", Georgia, "Times New Roman", serif;
+  --sans:  "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+
+  --ink:         #2b1e12;
+  --ink-soft:    #57432f;
+  --ink-mute:    #8f7a5e;
+  --line:        rgba(90, 60, 30, 0.18);
+
+  --card-bg:     rgba(248, 236, 214, 0.86);
+  --card-bg-2:   rgba(248, 236, 214, 0.96);
+  --surface-2:   rgba(238, 218, 186, 0.9);
+
+  --terra:       #b06b46;
+  --terra-2:     #d99a76;
+  --moss:        #7d8a6a;
+  --amber:       #d99a4a;
+
+  --dim-bg:      #1a0f08;
+  --dim-ink:     #f6d5a1;
+
+  --radius-lg:   20px;
+  --radius:      14px;
+  --shadow-warm: 0 20px 60px rgba(60, 25, 5, 0.28);
+  --shadow-soft: 0 6px 20px rgba(60, 25, 5, 0.14);
+
+  color-scheme: light;
+  font-family: var(--sans);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  color: var(--ink);
+  line-height: 1.55;
+  font-size: 15.5px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  position: relative;
+  overflow-x: hidden;
+  background: #2a1a10;
+  transition: background 1200ms ease, color 900ms ease;
+}
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+
+/* -------------------- Scène + compagnon -------------------- */
+
+.scene {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+.scene-svg { width: 100%; height: 100%; display: block; }
+.scene-veil {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(circle at 30% 50%, rgba(255, 180, 90, 0.10), transparent 55%),
+    linear-gradient(to bottom, rgba(30, 15, 5, 0.05) 0%, rgba(30, 15, 5, 0.25) 100%);
+  pointer-events: none;
+}
+body.pos-couche .scene-veil {
+  background:
+    radial-gradient(circle at 30% 50%, rgba(255, 180, 90, 0.14), transparent 60%),
+    linear-gradient(to bottom, rgba(30, 15, 5, 0.10) 0%, rgba(30, 15, 5, 0.45) 100%);
+}
+
+/* Respiration du compagnon (tout le groupe monte / descend très légèrement) */
+#compagnon {
+  transform-origin: center;
+  animation: compagnon-breath 4.5s ease-in-out infinite;
+}
+@keyframes compagnon-breath {
+  0%, 100% { transform: translate(830px, 460px) scale(1); }
+  50%      { transform: translate(830px, 458px) scale(1.005); }
+}
+
+/* Quand le compagnon "parle" (audio TTS actif) : la bouche pulse */
+#compagnon .mouth {
+  transform-origin: 0 -32px;
+  transform-box: fill-box;
+}
+body.compagnon-speaking #compagnon .mouth {
+  animation: compagnon-mouth 0.28s ease-in-out infinite alternate;
+}
+@keyframes compagnon-mouth {
+  from { transform: scaleY(0.6); }
+  to   { transform: scaleY(1.9); }
+}
+
+/* -------------------- Topbar -------------------- */
+
+.topbar {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 32px;
+}
+.brand {
+  font-size: 12px;
+  letter-spacing: 0.34em;
+  text-transform: lowercase;
+  color: #f5e4c4;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+.topbar-right { display: flex; gap: 12px; align-items: center; }
+
+.posture {
+  display: inline-flex;
+  background: rgba(30, 18, 10, 0.55);
+  border: 1px solid rgba(255, 220, 170, 0.15);
+  border-radius: 999px;
+  padding: 3px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.posture-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 220, 170, 0.75);
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 200ms, background 200ms;
+}
+.posture-btn.active { background: var(--terra); color: #fff; }
+.posture-btn:not(.active):hover { color: #fff; }
+
+/* -------------------- Main + cartes -------------------- */
+
+main {
+  flex: 1;
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 24px 40px;
+}
+.screen {
+  width: 100%;
+  max-width: 560px;
+  display: none;
+  animation: rise 700ms ease both;
+}
+.screen.active { display: block; }
+@keyframes rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.card {
+  background: var(--card-bg);
+  border: 1px solid rgba(255, 240, 210, 0.55);
+  border-radius: var(--radius-lg);
+  padding: 30px 32px;
+  backdrop-filter: blur(14px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
+  box-shadow: var(--shadow-warm);
+}
+
+/* La carte de séance est plus compacte pour laisser respirer le compagnon */
+.session-card {
+  max-width: 440px;
+  padding: 24px 26px 22px;
+}
+
+.eyebrow {
+  font-size: 10.5px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  margin: 0 0 12px;
+  font-weight: 500;
+}
+
+h1, h2, .psy-caption, .world-desc, .close-invite, .open-invite, .stage-hint {
+  font-family: var(--serif);
+  font-variation-settings: "opsz" 40, "SOFT" 100, "wght" 450;
+}
+h1, h2 {
+  font-weight: 450;
+  color: var(--ink);
+  margin: 0 0 18px;
+  font-variation-settings: "opsz" 72, "SOFT" 100, "wght" 500;
+  letter-spacing: -0.005em;
+}
+h1 { font-size: 34px; line-height: 1.15; }
+h2 { font-size: 26px; line-height: 1.25; }
+
+.lede {
+  color: var(--ink-soft);
+  margin: 0 0 28px;
+  font-size: 15.5px;
+}
+
+/* -------------------- Écran 1 : thèmes -------------------- */
+
+.themes { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.theme-btn {
+  width: 100%;
+  text-align: left;
+  background: var(--card-bg-2);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  padding: 18px 22px;
+  border-radius: var(--radius);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: var(--shadow-soft);
+  transition: transform 200ms, border-color 200ms, box-shadow 200ms;
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+}
+.theme-btn:hover { border-color: var(--terra); transform: translateY(-1px); }
+.theme-btn .arrow { color: var(--ink-mute); transition: color 200ms, transform 200ms; font-size: 18px; }
+.theme-btn:hover .arrow { color: var(--terra); transform: translateX(4px); }
+
+/* -------------------- Écran 2 : séance -------------------- */
+
+.progress {
+  display: flex; justify-content: center; gap: 7px;
+  margin: 0 0 22px;
+}
+.dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: rgba(90, 60, 30, 0.25);
+  transition: transform 300ms, background 300ms;
+}
+.dot.done { background: var(--moss); }
+.dot.current { background: var(--terra); transform: scale(1.7); }
+
+/* Sous-titre discret de ce que le compagnon vient de dire */
+.psy-caption {
+  font-size: 17px;
+  line-height: 1.5;
+  color: var(--ink);
+  text-align: center;
+  margin: 0 0 8px;
+  min-height: 2.4em;
+  font-variation-settings: "opsz" 24, "SOFT" 100, "wght" 400;
+  font-style: italic;
+}
+
+.reformulate {
+  display: block;
+  margin: 10px auto 0;
+  background: transparent;
+  border: 1px dashed rgba(90, 60, 30, 0.35);
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 12.5px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 200ms, border-color 200ms;
+}
+.reformulate:hover:not(:disabled) { color: var(--terra); border-color: var(--terra); }
+.reformulate:disabled { opacity: 0.5; cursor: default; }
+
+.mic-wrap {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  margin: 24px 0 14px;
+}
+.mic {
+  width: 88px; height: 88px;
+  border-radius: 50%;
+  border: none;
+  background: radial-gradient(circle at 32% 30%, var(--terra-2), var(--terra) 70%);
+  color: #fff;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow:
+    0 12px 30px rgba(176, 107, 70, 0.4),
+    inset 0 2px 4px rgba(255, 240, 220, 0.35);
+  transition: transform 180ms;
+}
+.mic:hover { transform: scale(1.04); }
+.mic:active { transform: scale(0.97); }
+.mic svg { width: 32px; height: 32px; }
+.mic.recording {
+  background: radial-gradient(circle at 32% 30%, #f7c99a, var(--amber) 70%);
+  animation: pulse 1.8s ease-in-out infinite;
+}
+.mic.pending { background: var(--ink-mute); cursor: wait; animation: none; }
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 12px 30px rgba(217, 162, 74, 0.35), 0 0 0 0 rgba(217, 162, 74, 0.4); }
+  50%      { box-shadow: 0 12px 30px rgba(217, 162, 74, 0.35), 0 0 0 22px rgba(217, 162, 74, 0); }
+}
+.hint { color: var(--ink-soft); font-size: 13px; margin: 0; }
+
+.user-caption {
+  text-align: center;
+  color: var(--ink-mute);
+  font-size: 13.5px;
+  font-style: italic;
+  margin: 8px 0 0;
+  min-height: 1.6em;
+}
+.sentiment {
+  text-align: center;
+  color: var(--ink-mute);
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-top: 6px;
+}
+.sentiment.alert { color: var(--terra); }
+
+/* -------------------- Écran 3 : monde apaisant -------------------- */
+
+.stage { position: relative; min-height: 440px; }
+.stage-reveal, .stage-closed, .stage-open { display: none; animation: rise 800ms ease both; }
+.stage[data-phase="reveal"] .stage-reveal { display: block; }
+.stage[data-phase="closed"] .stage-closed { display: flex; }
+.stage[data-phase="open"]   .stage-open   { display: block; }
+
+.world-desc {
+  font-size: 19px;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--surface-2);
+  border-left: 3px solid var(--terra);
+  padding: 20px 24px;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  margin: 0 0 20px;
+  font-style: italic;
+  font-variation-settings: "opsz" 24, "SOFT" 100;
+}
+.details {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 10px 22px;
+  padding: 16px 20px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin: 0 0 20px;
+  font-size: 14px;
+}
+.details dt { color: var(--ink-mute); text-transform: capitalize; font-weight: 500; }
+.details dd { margin: 0; color: var(--ink); }
+.stage-hint {
+  text-align: center;
+  color: var(--ink-mute);
+  font-style: italic;
+  font-size: 15px;
+  margin: 18px 0 0;
+}
+
+.stage-closed {
+  flex-direction: column; align-items: center; justify-content: center;
+  min-height: 440px; gap: 26px; padding: 30px 20px;
+}
+.close-invite {
+  font-size: 21px;
+  line-height: 1.5;
+  color: var(--dim-ink);
+  text-align: center;
+  max-width: 32ch;
+  margin: 0;
+}
+.close-status {
+  color: var(--ink-mute);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.breathe { position: relative; width: 180px; height: 180px; display: flex; align-items: center; justify-content: center; }
+.breathe-ring, .breathe-core { position: absolute; border-radius: 50%; }
+.breathe-ring {
+  width: 100%; height: 100%;
+  background: radial-gradient(circle, rgba(217, 162, 74, 0.55), transparent 65%);
+  animation: breathe-ring 10s ease-in-out infinite;
+  filter: blur(6px);
+}
+.breathe-core {
+  width: 42%; height: 42%;
+  background: radial-gradient(circle, #f6d5a1, #d99a55 60%, transparent 100%);
+  animation: breathe-core 10s ease-in-out infinite;
+  box-shadow: 0 0 40px rgba(217, 162, 74, 0.5);
+}
+@keyframes breathe-ring {
+  0%, 100% { transform: scale(0.75); opacity: 0.55; }
+  40%      { transform: scale(1.45); opacity: 1; }
+}
+@keyframes breathe-core {
+  0%, 100% { transform: scale(0.7); opacity: 0.6; }
+  40%      { transform: scale(1.2); opacity: 1; }
+}
+
+/* Yeux fermés : le salon s'éteint, seul le feu chauffe */
+body.eyes-closed { background: var(--dim-bg); }
+body.eyes-closed .scene-svg { opacity: 0.35; filter: brightness(0.6); }
+body.eyes-closed .scene-veil {
+  background:
+    radial-gradient(circle at 33% 55%, rgba(255, 180, 90, 0.35), transparent 55%),
+    linear-gradient(to bottom, rgba(0,0,0,0.6), rgba(0,0,0,0.85));
+}
+body.eyes-closed .card {
+  background: rgba(24, 14, 6, 0.6);
+  border-color: rgba(217, 162, 74, 0.2);
+  color: var(--dim-ink);
+}
+body.eyes-closed .topbar, body.eyes-closed .footlink { opacity: 0.5; }
+
+.open-invite { font-size: 21px; line-height: 1.5; color: var(--ink); margin: 0 0 24px; }
+.world-thumb {
+  width: 100%; max-height: 320px; object-fit: cover;
+  border-radius: var(--radius); display: block; margin: 0 0 22px;
+  box-shadow: var(--shadow-warm);
+}
+.world-enter {
+  display: inline-block;
+  padding: 16px 34px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #f8ecd6;
+  text-decoration: none;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  font-weight: 500;
+  transition: transform 200ms, background 200ms;
+  box-shadow: var(--shadow-warm);
+}
+.world-enter:hover { transform: translateY(-1px); background: var(--terra); }
+.restart {
+  display: block;
+  margin: 28px auto 0;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  padding: 12px 22px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: border-color 200ms, color 200ms;
+}
+.restart:hover { border-color: var(--terra); color: var(--terra); }
+
+/* -------------------- Footer -------------------- */
+
+.footlink {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  padding: 16px 24px 26px;
+  color: rgba(245, 228, 196, 0.75);
+  font-size: 12.5px;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+.footlink a {
+  color: #f8c078;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(248, 192, 120, 0.5);
+}
+
+/* -------------------- Petit écran -------------------- */
+
+@media (max-width: 480px) {
+  .topbar { padding: 18px 20px; }
+  .card { padding: 24px 20px; }
+  .session-card { padding: 20px 18px; }
+  h1 { font-size: 26px; }
+  h2 { font-size: 22px; }
+  .psy-caption { font-size: 15.5px; }
+  .world-desc { font-size: 17px; }
+  .mic { width: 78px; height: 78px; }
+  .details { grid-template-columns: 1fr; gap: 4px 0; }
+  .details dt { margin-top: 8px; }
+  .breathe { width: 150px; height: 150px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 200ms !important; }
+  .flames path { animation: none !important; }
+  #compagnon { animation: none !important; }
+}

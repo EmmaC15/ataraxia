@@ -1,0 +1,24 @@
+# Ataraxia — dépendances Python
+
+# LLM (dialogue psy, sentiment, enrichissement description monde)
+groq>=0.9.0
+python-dotenv>=1.0.0
+
+# Audio I/O (micro + haut-parleur côté CLI)
+sounddevice>=0.4.6
+soundfile>=0.12.1
+numpy>=1.24
+
+# TTS français chaleureux
+edge-tts>=6.1.10
+pygame>=2.5.0   # lecture MP3 générés par edge-tts (côté CLI)
+
+# Web interface PC (backend FastAPI + serveur ASGI)
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9   # requis par FastAPI pour UploadFile
+
+# Client HTTP pour l'API marble.worldlabs
+httpx>=0.27
+
+# STT via Groq Whisper large-v3-turbo — pas de dep locale (utilise `groq` ci-dessus)
