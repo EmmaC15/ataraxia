@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Cours — le code d'Ataraxia expliqué</title>
+  <meta name="description" content="Les notions clés qui font tourner Ataraxia — FastAPI, async, VAD Web Audio, LLM, TTS, prompts, cache, HTTPS, expliquées avec du vrai code du projet.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..600,0..100&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <a class="brand" href="index.html">ataraxia</a>
+    <nav class="nav" aria-label="navigation">
+      <a href="index.html#quest-ce">c'est quoi</a>
+      <a href="index.html#comment">comment</a>
+      <a href="index.html#quiz">quiz</a>
+      <a href="code.html">cours code</a>
+      <a href="index.html#faq">faq</a>
+    </nav>
+  </header>
+
+  <main id="top">
+
+    <!-- ============================================================
+         HERO du cours
+         ============================================================ -->
+    <section class="course-hero">
+      <p class="eyebrow">cours</p>
+      <h1>Comment Ataraxia<br>fonctionne, <em>vraiment</em>.</h1>
+      <p class="hero-lede">
+        Un tour des notions techniques importantes du projet, expliquées avec
+        du <em>vrai code</em> du repo. Pas de théorie abstraite, pas de jargon
+        décoratif — chaque bloc = un concept + un exemple qui tourne + un piège
+        classique quand il y en a un.
+      </p>
+      <div class="course-toc">
+        <h4>Sommaire du cours</h4>
+        <ol>
+          <li><a href="#ch1">L'architecture en couches</a></li>
+          <li><a href="#ch2">Backend Python — FastAPI</a></li>
+          <li><a href="#ch3">Backend Python — asynchrone</a></li>
+          <li><a href="#ch4">Backend Python — erreurs & fallback</a></li>
+          <li><a href="#ch5">LLM & prompts</a></li>
+          <li><a href="#ch6">Frontend — Web Audio (le VAD)</a></li>
+          <li><a href="#ch7">Frontend — état, fetch, audio</a></li>
+          <li><a href="#ch8">CSS moderne</a></li>
+          <li><a href="#ch9">Concepts web & réseau</a></li>
+          <li><a href="#check">Petit quiz de vérification</a></li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         CHAPITRE 1 — Architecture
+         ============================================================ -->
+    <h2 class="chapter-title" id="ch1"><small>chapitre 1</small>L'architecture en couches</h2>
+
+    <article class="notion">
+      <div class="notion-head">
+        <span class="notion-num">01</span>
+        <h3 class="notion-title">Séparer par responsabilité, pas par fichier</h3>
+        <span class="notion-lang">structure</span>
+      </div>
+      <p class="notion-brief">Chaque dossier a UNE mission et n'en connaît pas d'autre.</p>
+      <div class="notion-body">
+        <p>Ataraxia est découpé en 4 dossiers, chacun avec une responsabilité étanche :</p>
+        <ul>
+          <li><code>voice/</code> — capter et jouer de l'audio (STT + TTS)</li>
+          <li><code>ai/</code> — les prompts LLM et la boucle de dialogue</li>
+          <li><code>marble/</code> — le client de l'API Marble</li>
+          <li><code>orchestrator/</code> — assemble tout (serveur FastAPI + front web)</li>
+        </ul>
+        <p>Règle qu'on tient : <code>ai/</code> ne sait rien de <code>marble/</code>, <code>marble/</code> ne sait rien de FastAPI. Seul <code>orchestrator/</code> connaît tout le monde.</p>
+        <p><strong>Pourquoi</strong> : remplacer Marble par un autre moteur ne touchera QUE <code>marble/client.py</code>. Changer de LLM ne touchera QUE <code>ai/conversation.py</code>. Chaque couche peut évoluer sans casser les autres.</p>
+      </div>
+    </article>
+
+    <!-- ============================================================
+         CHAPITRE 2 — FastAPI
+         ============================================================ -->
+    <h2 class="chapter-title" id="ch2"><small>chapitre 2</small>Backend Python — FastAPI</h2>
+
+    <article class="notion">
+      <div class="notion-head">
+        <span class="notion-num">02</span>
+        <h3 class="notion-title">Un endpoint = un décorateur + une fonction typée</h3>
+        <span class="notion-lang">python · fastapi</span>
+      </div>
+      <p class="notion-brief">Le décorateur enregistre la route ; la fonction reçoit les params, renvoie du JSON.</p>
+      <div class="notion-body">
+        <p>Extrait de <code>orchestrator/server.py</code> :</p>
+        <pre class="notion-code"><code><span class="kw">@app</span>.get(<span class="str">"/api/themes"</span>)
+<span class="kw">def</span> <span class="fn">themes</span>() -> dict:
+    <span class="kw">return</span> {<span class="str">"themes"</span>: list_themes(), <span class="str">"total_turns"</span>: TOURS_PAR_SEANCE}</code></pre>
+        <p>FastAPI se charge de tout : sérialiser le dict retourné en JSON, définir l'entête <code>Content-Type: application/json</code>, gérer les codes HTTP. La <strong>type hint</strong> <code>-> dict</code> est utilisée par FastAPI pour générer la doc OpenAPI (disponible sur <code>/docs</code>).</p>
+      </div>
+    </article>
+
+    <article class="notion">
+      <div class="notion-head">
+        <span class="notion-num">03</span>
+        <h3 class="notion-title">Pydantic valide les entrées automatiquement</h3>
+        <span class="notion-lang">python · pydantic</span>
+      </div>
+      <p class="notion-brief">Un modèle Pydantic = un contrat sur ce que le client DOIT envoyer.</p>
+      <div class="notion-body">
+        <pre class="notion-code"><code><span class="kw">class</span> <span class="fn">StartReq</span>(BaseModel):
+    theme: str
+
+<span class="kw">@app</span>.post(<span class="str">"/api/session/start"</span>)
+<span class="kw">async def</span> <span class="fn">start</span>(req: StartReq) -> dict:
+    <span class="kw">if</span> req.theme <span class="kw">not in</span> list_themes():
+        <span class="kw">raise</span> HTTPException(<span class="str">400</span>, <span class="str">"Thème inconnu"</span>)
+    ...</code></pre>
+        <p>Si le client envoie <code>{"themme": "..."}</code> (typo), FastAPI répond <strong>422 Unprocessable Entity</strong> automatiquement, avec un message explicite pointant le champ manquant. Zéro validation à écrire à la main.</p>
+      </div>
+    </article>
+
+    <article class="notion">
+      <div class="notion-head">
+        <span class="notion-num">04</span>
+        <h3 class="notion-title">Upload de fichier — UploadFile + multipart</h3>
+        <span class="notion-lang">python · fastapi</span>
+      </div>
+      <p class="notion-brief">Recevoir un blob (audio, image, PDF) = <code>UploadFile</code> + <code>File(...)</code>.</p>
+      <div class="notion-body">
+        <pre class="notion-code"><code><span class="kw">@app</span>.post(<span class="str">"/api/session/{sid}/turn"</span>)
+<span class="kw">async def</span> <span class="fn">turn</span>(sid: str, audio: UploadFile = File(...)) -> dict:
+    data = <span class="kw">await</span> audio.read()      <span class="cmt"># lit le fichier en RAM</span>
+    <span class="kw">if not</span> data:
+        <span class="kw">raise</span> HTTPException(<span class="str">400</span>, <span class="str">"Audio vide"</span>)
+    ...</code></pre>
+        <p>Côté client, on envoie via <code>FormData</code> :</p>
+        <pre class="notion-code"><code><span class="kw">const</span> fd = <span class="kw">new</span> FormData();
+fd.append(<span class="str">"audio"</span>, blob, <span class="str">"user.webm"</span>);
+<span class="kw">await</span> fetch(url, { method: <span class="str">"POST"</span>, body: fd });</code></pre>
+        <p><strong>Ne pas mettre</strong> <code>Content-Type: application/json</code> dans les headers — FastAPI attend du <code>multipart/form-data</code> et le browser positionne la bonne valeur automatiquement quand on passe un FormData.</p>
+      </div>
+    </article>
+
+    <article class="notion">
+      <div class="notion-head">
+        <span class="notion-num">05</span>
+        <h3 class="notion-title">Type hints avancés : <code>Literal</code> pour les enums</h3>
+        <span class="notion-lang">python</span>
+      </div>
+      <p class="notion-brief">Contraindre un paramètre à une liste finie de valeurs, sans créer une classe Enum.</p>
+      <div class="notion-body">
+        <pre class="notion-code"><code><span class="kw">from</span> typing <span class="kw">import</span> Literal
+
+Theme = Literal[<span class="str">"anxiete"</span>, <span class="str">"stress"</span>, <span class="str">"humeur"</span>, <span class="str">"sommeil"</span>, <span class="str">"estime"</span>, <span class="str">"autre"</span>]
+
+<span class="kw">def</span> <span class="fn">opening_question</span>(theme: Theme) -> str:
+    <span class="kw">return</span> OPENING_QUESTIONS[theme]</code></pre>
+        <p>Les type-checkers (mypy, pyright, VS Code) refuseront <code>opening_question("foo")</code> en amont de l'exécution. Léger, sans dépendance.</p>
+      </div>
+    </article>
+
+    <!-- ============================================================
+         CHAPITRE 3 — Async
+         ============================================================ -->
+    <h2 class="chapter-title" id="ch3"><small>chapitre 3</small>Backend Python — asynchrone</h2>
+
+    <article class="notion">
+      <div class="notion-head">
+        <span class="notion-num">06</span>
+        <h3 class="notion-title"><code>async / await</code> — ne pas bloquer pendant l'attente</h3>
+        <span class="notion-lang">python</span>
+      </div>
+      <p class="notion-brief">Pendant qu'on attend une réponse réseau, le serveur peut traiter d'autres requêtes.</p>
+      <div class="notion-body">
+        <p>Une route <code>async def</code> peut faire <code>await</code> sur n'importe quelle opération I/O. Uvicorn ne bloque pas — il libère le thread pendant l'attente.</p>
+        <pre class="notion-code"><code><span class="kw">async def</span> <span class="fn">_tts_b64</span>(text: str) -> str | <span class="kw">None</span>:
+    tmp = Path(tempfile.gettempdir()) / <span class="str">f"ataraxia_tts_{uuid.uuid4().hex}.mp3"</span>
+    <span class="kw">await</span> tts.synth_async(text, tmp)   <span class="cmt"># await = le serveur reste dispo</span>
+    <span class="kw">return</span> base64.b64encode(tmp.read_bytes()).decode()</code></pre>
+      </div>
+    </article>
+
+    <article class="notion">
+      <div class="notion-head">
+        <span class="notion-num">07</span>
+        <h3 class="notion-title"><code>asyncio.gather</code> — paralléliser deux appels indépendants</h3>
+        <span class="notion-lang">python</span>
+      </div>
+      <p class="notion-brief">Deux appels TTS lancés séquentiellement = 2× le temps. En parallèle = le temps du plus long.</p>
+      <div class="notion-body">
+        <pre class="notion-code"><code><span class="cmt"># Les deux TTS n'ont aucune dépendance entre eux → on parallélise</span>
+desc_audio, close_audio = <span class="kw">await</span> asyncio.gather(
+    _tts_b64(enriched[<span class="str">"description"</span>]),
+    _tts_b64(INVITE_CLOSE_TEXT),
+)</code></pre>
+        <p>Sans <code>gather</code>, il faudrait <code>desc = await _tts_b64(...); close = await _tts_b64(...)</code> — soit ~2× 800 ms = 1.6 s au lieu de 800 ms.</p>
+        <p><strong>Piège</strong> : n'utiliser <code>gather</code> QUE si les tâches sont indépendantes. Si <code>close</code> a besoin du résultat de <code>desc</code>, il faut les enchaîner.</p>
+      </div>
+    </article>
+
+    <!-- ============================================================
+         CHAPITRE 4 — Erreurs & fallback
+         ============================================================ -->
+    <h2 class="chapter-title" id="ch4"><small>chapitre 4</small>Backend Python — erreurs & fallback</h2>
+
+    <article class="notion">
+      <div class="notion-head">
+        <span class="notion-num">08</span>
+        <h3 class="notion-title">Exceptions personnalisées pour typer les erreurs d'API externe</h3>
+        <span class="notion-lang">python</span>
+      </div>
+      <p class="notion-brief">Une classe d'exception par famille d'erreur métier = du <code>except</code> propre à l'appel.</p>
+      <div class="notion-body">
+        <pre class="notion-code"><code><span class="kw">class</span> <span class="fn">MarbleAPIError</span>(RuntimeError):
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, status_code: int, detail: str = <span class="str">""</span>):
+        self.status_code = status_code
+        self.detail = detail
+        <span class="kw">super</span>().__init__(<span class="str">f"Marble API {status_code}: {detail}"</span>)
+
+<span class="kw">class</span> <span class="fn">MarbleOutOfCreditsError</span>(MarbleAPIError):
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, detail: str = <span class="str">""</span>):
+        <span class="kw">super</span>().__init__(<span class="str">402</span>, detail <span class="kw">or</span> <span class="str">"Insufficient API credits"</span>)</code></pre>
+        <p>Ensuite dans le endpoint, on peut catcher spécifiquement :</p>
+        <pre class="notion-code"><code><span class="kw">try</span>:
+    world = _marble.generate_world(desc, details)
+<span class="kw">except</span> MarbleOutOfCreditsError <span class="kw">as</span> e:
+    <span class="kw">raise</span> HTTPException(<span class="str">402</span>, detail={<span class="str">"code"</span>: <span class="str">"marble_out_of_credits"</span>, ...})
+<span class="kw">except</span> MarbleAPIError <span class="kw">as</span> e:
+    <span class="kw">raise</span> HTTPException(<span class="str">502</span>, detail={<span class="str">"code"</span>: <span class="str">"marble_api_error"</span>, ...})</code></pre>
+        <p>Le front reçoit un code métier structuré (<code>marble_out_of_credits</code>) et peut afficher un message adapté avec un lien vers le billing.</p>
+      </div>
+    </article>
+
+    <article class="notion">
+      <div class="notion-head">
+        <span class="notion-num">09</span>
+        <h3 class="notion-title">Le "graceful fallback" — dégrader plutôt que crasher</h3>
+        <span class="notion-lang">python</span>
+      </div>
+      <p class="notion-brief">Si un service externe refuse, on continue avec une version dégradée au lieu de renvoyer un 500.</p>
+      <div class="notion-body">
+        <p>Le LLM peut refuser une génération JSON (safety trigger). Sans protection : HTTP 500 côté user. Avec fallback :</p>
+        <pre class="notion-code"><code><span class="kw">def</span> <span class="fn">enrich_world_description</span>(self, user_input: str) -> dict:
+    text = (user_input <span class="kw">or</span> <span class="str">""</span>).strip()
+    <span class="kw">if not</span> text:
+        <span class="kw">return</span> {<span class="str">"description"</span>: <span class="str">""</span>, <span class="str">"details"</span>: {}}
+    <span class="kw">try</span>:
+        raw = self._chat(msgs, temperature=<span class="str">0.8</span>, json_mode=<span class="kw">True</span>)
+        <span class="kw">return</span> parse_world_description(raw)
+    <span class="kw">except</span> Exception <span class="kw">as</span> e:
+        <span class="cmt"># Groq a refusé (safety) OU JSON invalide OU timeout.</span>
+        <span class="cmt"># On retombe sur la description brute — Marble s'en accommode.</span>
+        <span class="kw">print</span>(<span class="str">f"[enrich] fallback — {type(e).__name__}: {e}"</span>)
+        <span class="kw">return</span> {<span class="str">"description"</span>: text, <span class="str">"details"</span>: {}}</code></pre>
+        <p><strong>Principe</strong> : chaque appel externe qui peut échouer sans être bloquant devrait avoir un plan B. L'user ne devrait jamais voir un 500 pour un truc récupérable.</p>
+      </div>
+    </article>
+
+    <article class="notion">
+      <div class="notion-head">
+        <span class="notion-num">10</span>
+        <h3 class="notion-title">HTTP status codes — pas juste 200 et 500</h3>
+        <span class="notion-lang">web</span>
+      </div>
+      <p class="notion-brief">Bien choisir le code = information machine-readable pour le client.</p>
+      <div class="notion-body">
+        <ul>
+          <li><strong>400 Bad Request</strong> — l'input est invalide (ex : session pas encore terminée)</li>
+          <li><strong>402 Payment Required</strong> — <em>rarement utilisé</em>, parfait pour « crédits épuisés »</li>
+          <li><strong>404 Not Found</strong> — la ressource n'existe pas (session inconnue)</li>
+          <li><strong>422 Unprocessable Entity</strong> — Pydantic l'utilise pour un body qui ne match pas le schéma</li>
+          <li><strong>500 Internal Server Error</strong> — bug côté serveur, jamais volontaire</li>
+          <li><strong>502 Bad Gateway</strong> — un service upstream (Marble, Groq) a échoué</li>
+        </ul>
+        <p>Ataraxia distingue explicitement 402 (crédits) et 502 (autre erreur Marble) — ça permet au front d'afficher un message d'action utile.</p>
+      </div>
+    </article>
+
+    <!-- ============================================================
+         CHAPITRE 5 — LLM & prompts
+         ============================================================ -->
+    <h2 class="chapter-title" id="ch5"><small>chapitre 5</small>LLM & prompts</h2>
+
+    <article class="notion">
+      <div class="notion-head">
+        <span class="notion-num">11</span>
+        <h3 class="notion-title">Un system prompt = un rôle et des règles</h3>
+        <span class="notion-lang">llm</span>
+      </div>
+      <p class="notion-brief">Le LLM est un acteur. Le system prompt lui dit qui il joue.</p>
+      <div class="notion-body">
+        <p>Extrait du prompt psy (<code>ai/prompts.py</code>) :</p>
+        <pre class="notion-code"><code>PSY_SYSTEM_PROMPT = <span class="str">"""Tu es le compagnon d'écoute d'Ataraxia [...]
+- Français, deuxième personne du singulier, voix calme, empathique.
+- À CHAQUE tour, tu commences par reformuler [...] puis tu poses UNE
+  seule nouvelle question, adaptée à ce qu'elle vient de partager.
+- Ne juge jamais, ne minimise jamais, n'invente rien sur elle.
+- Si la personne exprime une détresse aiguë [...] tu l'invites
+  immédiatement à contacter le 3114 [...]
+"""</span></code></pre>
+        <p><strong>Trois choses qui marchent</strong> pour un system prompt :</p>
+        <ul>
+          <li>Impératifs clairs (« Tu POSES UNE seule question ») — pas de « idéalement »</li>
+          <li>Interdictions explicites (« n'invente jamais »)</li>
+          <li>Cas critiques traités séparément (« si détresse → 3114 »)</li>
+        </ul>
+      </div>
+    </article>
+
+    <article class="notion">
+      <div class="notion-head">
+        <span class="notion-num">12</span>
+        <h3 class="notion-title"><code>response_format: json_object</code> — forcer du JSON</h3>
+        <span class="notion-lang">llm · groq</span>
+      </div>
+      <p class="notion-brief">Sans, le LLM peut répondre en prose. Avec, il DOIT renvoyer un JSON valide.</p>
+      <div class="notion-body">
+        <pre class="notion-code"><code>r = client.chat.completions.create(
+    model=<span class="str">"openai/gpt-oss-120b"</span>,
+    messages=msgs,
+    temperature=<span class="str">0.8</span>,
+    response_format={<span class="str">"type"</span>: <span class="str">"json_object"</span>},  <span class="cmt"># ← ici</span>
+)</code></pre>
+        <p><strong>Piège</strong> : si le modèle refuse (safety) et répond « I'm sorry, I can't fulfill that request. », ce n'est pas du JSON. Groq renvoie alors <code>400 json_validate_failed</code> — d'où l'utilité du fallback vu en notion 09.</p>
+      </div>
+    </article>
+
+    <article class="notion">
+      <div class="notion-head">
+        <span class="notion-num">13</span>
+        <h3 class="notion-title">Prompt = source de qualité produit</h3>
+        <span class="notion-lang">llm · design</span>
+      </div>
+      <p class="notion-brief">Un prompt trop générique produit du contenu générique. Une contrainte forte débloque la spécificité.</p>
+      <div class="notion-body">
+        <p>Le prompt d'enrichissement initial disait juste « Fidèle à l'intention ». Résultat : le LLM proposait toujours plage ou forêt. Corrigé en :</p>
+        <pre class="notion-code"><code><span class="cmt"># Extrait de WORLD_DESCRIPTION_SYSTEM_PROMPT</span>
+<span class="str">"""RÈGLE ABSOLUE — LE LIEU EST CELUI DE LA PERSONNE :
+Le lieu qu'elle nomme (café, grenier, atelier, phare, cathédrale...)
+c'est CE lieu, exactement, que tu décris. TU NE LE REMPLACES JAMAIS
+par un lieu plus 'générique' comme une plage ou une forêt, sauf si
+elle-même a nommé une plage ou une forêt."""</span></code></pre>
+        <p>Effet mesuré : « café en terrasse italienne » → <code>lieu_type: "café en terrasse italienne"</code> (avant : <code>"plage"</code>). Une contrainte forte + une liste d'exemples débloque la spécificité.</p>
+      </div>
+    </article>
+
+    <article class="notion">
+      <div class="notion-head">
+        <span class="notion-num">14</span>
+        <h3 class="notion-title">Deux modèles pour deux usages</h3>
+        <span class="notion-lang">llm · perf</span>
+      </div>
+      <p class="notion-brief">Modèle gros pour la qualité, modèle petit pour la latence — même provider, deux endpoints.</p>
+      <div class="notion-body">
+        <pre class="notion-code"><code>DEFAULT_CHAT_MODEL = <span class="str">"openai/gpt-oss-120b"</span>  <span class="cmt"># psy + enrichissement (qualité)</span>
+DEFAULT_FAST_MODEL = <span class="str">"openai/gpt-oss-20b"</span>   <span class="cmt"># sentiment JSON (rapide)</span></code></pre>
+        <p>L'analyse de sentiment n'a pas besoin d'une prose élégante — juste un JSON strict. Le petit modèle suffit largement et divise la latence par ~3.</p>
+      </div>
+    </article>
+
+    <!-- ============================================================
+         CHAPITRE 6 — Web Audio VAD
+         ============================================================ -->
+    <h2 class="chapter-title" id="ch6"><small>chapitre 6</small>Frontend — Web Audio (le VAD)</h2>
+
+    <article class="notion">
+      <div class="notion-head">
+        <span class="notion-num">15</span>
+        <h3 class="notion-title">Détection d'activité vocale (VAD) via RMS</h3>
+        <span class="notion-lang">javascript · web audio</span>
+      </div>
+      <p class="notion-brief">Calculer l'énergie audio (RMS) toutes les 100 ms ; au-dessus d'un seuil = parole ; sous le seuil pendant 1.5 s = silence → on coupe.</p>
+      <div class="notion-body">
+        <pre class="notion-code"><code><span class="kw">const</span> audioCtx = <span class="kw">new</span> AudioContext();
+<span class="kw">const</span> source = audioCtx.createMediaStreamSource(stream);
+<span class="kw">const</span> analyser = audioCtx.createAnalyser();
+analyser.fftSize = <span class="str">512</span>;
+source.connect(analyser);
+<span class="kw">const</span> buf = <span class="kw">new</span> Float32Array(analyser.fftSize);
+
+<span class="kw">const</span> interval = setInterval(() => {
+  analyser.getFloatTimeDomainData(buf);
+  <span class="kw">let</span> sum = <span class="str">0</span>;
+  <span class="kw">for</span> (<span class="kw">let</span> i = <span class="str">0</span>; i &lt; buf.length; i++) sum += buf[i] * buf[i];
+  <span class="kw">const</span> rms = Math.sqrt(sum / buf.length);
+  <span class="cmt">// rms &gt; 0.015 = parole détectée ; rms bas &gt; 1500 ms = silence</span>
+}, <span class="str">100</span>);</code></pre>
+        <p>Pas besoin de bibliothèque tierce. L'AnalyserNode fait le boulot. Les seuils (<code>SPEAK_THRESHOLD = 0.015</code>, <code>SILENCE_MS = 1500</code>) sont ajustables selon l'environnement.</p>
+      </div>
+      <div class="notion-warn">
+        <strong>Piège classique</strong> : quand l'audio TTS joue en même temps, le micro capte le haut-parleur (echo). Solution : activer <code>echoCancellation: true</code> à l'ouverture du micro, et augmenter le seuil pendant la lecture.
+      </div>
+    </article>
+
+    <article class="notion">
+      <div class="notion-head">
+        <span class="notion-num">16</span>
+        <h3 class="notion-title">MediaRecorder — enregistrer un blob audio</h3>
+        <span class="notion-lang">javascript</span>
+      </div>
+      <p class="notion-brief">L'API standard du navigateur pour capter le micro en WebM Opus.</p>
+      <div class="notion-body">
+        <pre class="notion-code"><code><span class="kw">const</span> mimeType = MediaRecorder.isTypeSupported(<span class="str">"audio/webm;codecs=opus"</span>)
+  ? <span class="str">"audio/webm;codecs=opus"</span>
+  : <span class="str">"audio/webm"</span>;
+<span class="kw">const</span> recorder = <span class="kw">new</span> MediaRecorder(stream, { mimeType });
+<span class="kw">const</span> chunks = [];
+recorder.ondataavailable = e => { <span class="kw">if</span> (e.data.size &gt; <span class="str">0</span>) chunks.push(e.data); };
+recorder.onstop = <span class="kw">async</span> () => {
+  <span class="kw">const</span> blob = <span class="kw">new</span> Blob(chunks, { type: mimeType });
+  <span class="kw">await</span> sendTurn(blob);
+};
+recorder.start(<span class="str">200</span>);  <span class="cmt">// chunks toutes les 200 ms</span></code></pre>
+        <p>WebM Opus est le format le plus universellement supporté par les navigateurs, et Whisper (côté serveur) le lit sans conversion.</p>
+      </div>
+      <div class="notion-warn">
+        <strong>Piège</strong> : sur iOS Safari, le mimeType peut ne pas être supporté ; il faut fallback sur <code>"audio/mp4"</code>. Utiliser <code>MediaRecorder.isTypeSupported()</code> avant de créer l'instance.
+      </div>
+    </article>
+
+    <!-- ============================================================
+         CHAPITRE 7 — État, fetch, audio
+         ============================================================ -->
+    <h2 class="chapter-title" id="ch7"><small>chapitre 7</small>Frontend — état, fetch, audio</h2>
+
+    <article class="notion">
+      <div class="notion-head">
+        <span class="notion-num">17</span>
+        <h3 class="notion-title">Un seul objet <code>state</code> global partagé</h3>
+        <span class="notion-lang">javascript · design</span>
+      </div>
+      <p class="notion-brief">Pas de framework ? Un seul objet <code>state</code> centralise tout ce qui doit être partagé entre handlers.</p>
+      <div class="notion-body">
+        <pre class="notion-code"><code><span class="kw">const</span> state = {
+  sessionId: <span class="kw">null</span>,
+  worldId: <span class="kw">null</span>,
+  totalTurns: <span class="str">5</span>,
+  recording: <span class="kw">false</span>,
+  currentAudio: <span class="kw">null</span>,
+  mode: <span class="str">"psy"</span>,        <span class="cmt">// "psy" | "quick"</span>
+  pendingRevealSkip: <span class="kw">null</span>, <span class="cmt">// closure : que faire au skip</span>
+};</code></pre>
+        <p>Avantage sur les frameworks à hooks : très lisible pour un projet à cette échelle, aucun besoin de re-render, aucune magie. Un handler mute <code>state</code>, un autre le lit — c'est tout.</p>
+        <p><strong>Quand ça craque</strong> : dès que plusieurs vues doivent auto-refresh sur une mutation, ce pattern devient pénible. Là on saute vers React/Svelte/etc.</p>
+      </div>
+    </article>
+
+    <article class="notion">
+      <div class="notion-head">
+        <span class="notion-num">18</span>
+        <h3 class="notion-title">Lire un audio base64 sans le télécharger</h3>
+        <span class="notion-lang">javascript</span>
+      </div>
+      <p class="notion-brief">Le backend renvoie l'audio en base64, on le colle dans une data-URL, le browser lit directement.</p>
+      <div class="notion-body">
+        <pre class="notion-code"><code><span class="kw">function</span> <span class="fn">playAudioB64</span>(b64, onEnded) {
+  <span class="kw">if</span> (state.currentAudio) {
+    <span class="kw">try</span> { state.currentAudio.pause(); } <span class="kw">catch</span> (_) {}
+  }
+  <span class="kw">const</span> audio = <span class="kw">new</span> Audio(<span class="str">"data:audio/mp3;base64,"</span> + b64);
+  state.currentAudio = audio;
+  audio.onended = onEnded;
+  audio.play().<span class="fn">catch</span>(err => console.warn(<span class="str">"lecture bloquée :"</span>, err));
+}</code></pre>
+        <p>Pas de <code>fetch</code>, pas d'URL temporaire, pas d'<code>&lt;audio src&gt;</code> dans le DOM. Le blob voyage en JSON à l'intérieur de la réponse API — un seul aller-retour réseau.</p>
+      </div>
+      <div class="notion-warn">
+        <strong>Piège</strong> : <code>audio.play()</code> retourne une <em>Promise</em> et peut être rejetée si l'user n'a pas encore interagi (autoplay policy). C'est pourquoi on <code>.catch</code> systématiquement.
+      </div>
+    </article>
+
+    <article class="notion">
+      <div class="notion-head">
+        <span class="notion-num">19</span>
+        <h3 class="notion-title">Cleanup rigoureux avec try/catch autour de chaque libération</h3>
+        <span class="notion-lang">javascript</span>
+      </div>
+      <p class="notion-brief">Oublier un cleanup laisse le micro allumé (icône rouge du browser) et bouffe la batterie.</p>
+      <div class="notion-body">
+        <pre class="notion-code"><code><span class="kw">const</span> cleanup = () => {
+  <span class="kw">try</span> { clearInterval(interval); } <span class="kw">catch</span> (_) {}
+  <span class="kw">try</span> { stream.getTracks().forEach(t => t.stop()); } <span class="kw">catch</span> (_) {}
+  <span class="kw">try</span> { audioCtx.close(); } <span class="kw">catch</span> (_) {}
+};</code></pre>
+        <p>Chaque <code>try/catch</code> individuel : si une libération échoue (ex : le contexte est déjà fermé), les suivantes s'exécutent quand même. Sans les try/catch séparés, une seule erreur bloquerait tout le cleanup.</p>
+      </div>
+    </article>
+
+    <!-- ============================================================
+         CHAPITRE 8 — CSS moderne
+         ============================================================ -->
+    <h2 class="chapter-title" id="ch8"><small>chapitre 8</small>CSS moderne</h2>
+
+    <article class="notion">
+      <div class="notion-head">
+        <span class="notion-num">20</span>
+        <h3 class="notion-title">CSS custom properties (variables)</h3>
+        <span class="notion-lang">css</span>
+      </div>
+      <p class="notion-brief">Un token défini une fois, réutilisé partout — changer la palette = éditer 6 lignes.</p>
+      <div class="notion-body">
+        <pre class="notion-code"><code>:root {
+  --terra: <span class="str">#b06b46</span>;
+  --ink: <span class="str">#2b1e12</span>;
+  --card: <span class="str">rgba(255, 250, 240, 0.85)</span>;
+  --radius: <span class="str">14px</span>;
+}
+.btn { background: <span class="fn">var</span>(--ink); color: <span class="str">#f8ecd6</span>; border-radius: <span class="fn">var</span>(--radius); }</code></pre>
+        <p>Contrairement à SCSS, les variables CSS sont <em>runtime</em> — modifiables via JavaScript, réactives au dark mode, cascadables par composant.</p>
+      </div>
+    </article>
+
+    <article class="notion">
+      <div class="notion-head">
+        <span class="notion-num">21</span>
+        <h3 class="notion-title">Grid responsive sans media query</h3>
+        <span class="notion-lang">css</span>
+      </div>
+      <p class="notion-brief"><code>auto-fit</code> + <code>minmax</code> = colonnes qui s'adaptent seules.</p>
+      <div class="notion-body">
+        <pre class="notion-code"><code>.tech-grid {
+  display: grid;
+  gap: <span class="str">18px</span>;
+  grid-template-columns: <span class="fn">repeat</span>(<span class="kw">auto-fit</span>, <span class="fn">minmax</span>(<span class="str">280px</span>, <span class="str">1fr</span>));
+}</code></pre>
+        <p>Sur écran large : 3-4 colonnes de 280 px min. Sur mobile : 1 colonne pleine largeur. Aucune media query, le grid gère seul.</p>
+      </div>
+    </article>
+
+    <article class="notion">
+      <div class="notion-head">
+        <span class="notion-num">22</span>
+        <h3 class="notion-title"><code>clamp()</code> pour la typo fluide</h3>
+        <span class="notion-lang">css</span>
+      </div>
+      <p class="notion-brief">Une seule règle qui gère min, préférée, max — le browser interpole selon la largeur.</p>
+      <div class="notion-body">
+        <pre class="notion-code"><code>h2 { font-size: <span class="fn">clamp</span>(<span class="str">28px</span>, <span class="str">4vw</span>, <span class="str">48px</span>); }
+<span class="cmt">/* jamais &lt; 28, jamais &gt; 48, sinon 4% de la largeur du viewport */</span></code></pre>
+        <p>Remplace 3-4 <code>@media</code> pour la même typo. Plus lisible, plus maintenable.</p>
+      </div>
+    </article>
+
+    <!-- ============================================================
+         CHAPITRE 9 — Concepts web
+         ============================================================ -->
+    <h2 class="chapter-title" id="ch9"><small>chapitre 9</small>Concepts web & réseau</h2>
+
+    <article class="notion">
+      <div class="notion-head">
+        <span class="notion-num">23</span>
+        <h3 class="notion-title">HTTPS requis pour <code>getUserMedia</code></h3>
+        <span class="notion-lang">web · sécurité</span>
+      </div>
+      <p class="notion-brief">Sans HTTPS, le browser refuse l'accès au micro. <code>localhost</code> est la seule exception.</p>
+      <div class="notion-body">
+        <p>C'est pour ça qu'on utilise <strong>cloudflared</strong> pour exposer Ataraxia au casque VR : ça donne une URL HTTPS gratuite qui contourne cette limitation.</p>
+        <pre class="notion-code"><code>cloudflared tunnel --url http://localhost:8000 --no-autoupdate
+<span class="cmt"># → https://xxx-xxx-xxx.trycloudflare.com</span></code></pre>
+      </div>
+    </article>
+
+    <article class="notion">
+      <div class="notion-head">
+        <span class="notion-num">24</span>
+        <h3 class="notion-title">CSP <code>frame-ancestors</code> — l'iframe qui ne se laisse pas embarquer</h3>
+        <span class="notion-lang">web · sécurité</span>
+      </div>
+      <p class="notion-brief">Un site peut refuser d'être embed dans une iframe cross-origin. Côté client, rien ne le contourne.</p>
+      <div class="notion-body">
+        <p>Quand on a voulu embarquer un monde Marble dans notre page :</p>
+        <pre class="notion-code"><code>$ curl -sI https://marble.worldlabs.ai/world/xxx
+content-security-policy: frame-ancestors <span class="str">'none'</span>
+x-frame-options: DENY</code></pre>
+        <p>Ces deux headers disent explicitement « aucune iframe cross-origin ne peut m'afficher ». Impossible à outrepasser sans changement côté serveur Marble.</p>
+        <p><strong>Solution</strong> : soit ouvrir dans un nouvel onglet (F0), soit télécharger l'asset panoramique et le rendre soi-même en 360° avec three.js (F2). On a choisi F0.</p>
+      </div>
+    </article>
+
+    <article class="notion">
+      <div class="notion-head">
+        <span class="notion-num">25</span>
+        <h3 class="notion-title">Cache navigateur — le piège du "ça marche pas encore"</h3>
+        <span class="notion-lang">web · debug</span>
+      </div>
+      <p class="notion-brief">Modifier <code>app.js</code> ne suffit pas — le browser peut servir la vieille version en cache.</p>
+      <div class="notion-body">
+        <p>Symptôme : tu modifies le JS, le serveur voit la nouvelle version, mais le browser continue à appeler l'ancien endpoint. C'est le cache HTTP.</p>
+        <p><strong>Solutions</strong> :</p>
+        <ul>
+          <li>Hard reload : <code>Ctrl+Shift+R</code> (Windows/Linux) ou <code>Cmd+Shift+R</code> (Mac)</li>
+          <li>Devtools ouvert avec « Disable cache » coché (Network tab)</li>
+          <li>Pour du prod : ajouter un query string versionné : <code>&lt;script src="app.js?v=42"&gt;</code></li>
+        </ul>
+      </div>
+    </article>
+
+    <!-- ============================================================
+         PETIT QUIZ DE VÉRIFICATION
+         ============================================================ -->
+    <div class="check" id="check">
+      <p class="eyebrow">petit quiz</p>
+      <h3>Tu as compris ?</h3>
+      <p style="color: var(--ink-soft); font-size: 15px;">
+        Six questions rapides sur ce que tu viens de lire. Clique la réponse
+        que tu penses juste — la bonne s'allume en vert.
+      </p>
+
+      <div class="check-item" data-answer="1">
+        <p>1. À quoi sert <code>response_format: json_object</code> ?</p>
+        <ul class="check-choices">
+          <li><button type="button">à styliser la réponse</button></li>
+          <li><button type="button">à forcer le LLM à répondre en JSON valide</button></li>
+          <li><button type="button">à activer les emojis</button></li>
+        </ul>
+        <p class="check-explain" hidden>
+          Il oblige le modèle à retourner un objet JSON valide. Si le modèle refuse (safety), l'API renvoie <code>400 json_validate_failed</code> — d'où l'intérêt du fallback.
+        </p>
+      </div>
+
+      <div class="check-item" data-answer="0">
+        <p>2. Pourquoi <code>asyncio.gather</code> ?</p>
+        <ul class="check-choices">
+          <li><button type="button">pour lancer plusieurs awaits en parallèle</button></li>
+          <li><button type="button">pour attendre plus rapidement</button></li>
+          <li><button type="button">pour ordonner les résultats</button></li>
+        </ul>
+        <p class="check-explain" hidden>
+          <code>gather</code> lance N coroutines simultanément et attend qu'elles finissent toutes. Utile quand les tâches n'ont pas de dépendance entre elles (par ex. deux TTS).
+        </p>
+      </div>
+
+      <div class="check-item" data-answer="2">
+        <p>3. HTTP <code>402</code> veut dire…</p>
+        <ul class="check-choices">
+          <li><button type="button">page introuvable</button></li>
+          <li><button type="button">accès refusé</button></li>
+          <li><button type="button">payment required (crédits épuisés)</button></li>
+        </ul>
+        <p class="check-explain" hidden>
+          Statut rare mais reconnu. Ataraxia l'utilise pour signifier « crédits Marble épuisés » et faire réagir le front avec un message + lien billing.
+        </p>
+      </div>
+
+      <div class="check-item" data-answer="1">
+        <p>4. Le VAD (Voice Activity Detection) mesure quoi ?</p>
+        <ul class="check-choices">
+          <li><button type="button">le nombre de mots par minute</button></li>
+          <li><button type="button">l'énergie audio (RMS) sur des fenêtres courtes</button></li>
+          <li><button type="button">la fréquence dominante</button></li>
+        </ul>
+        <p class="check-explain" hidden>
+          On calcule le RMS (Root Mean Square) de l'onde toutes les 100 ms via un AnalyserNode. Au-dessus d'un seuil = parole ; en-dessous longtemps = silence → coupe.
+        </p>
+      </div>
+
+      <div class="check-item" data-answer="0">
+        <p>5. Pourquoi <code>getUserMedia</code> échoue en HTTP simple sur un casque VR ?</p>
+        <ul class="check-choices">
+          <li><button type="button">le navigateur exige un contexte sécurisé (HTTPS ou localhost)</button></li>
+          <li><button type="button">le casque n'a pas de micro physique</button></li>
+          <li><button type="button">il faut installer un driver</button></li>
+        </ul>
+        <p class="check-explain" hidden>
+          Tous les navigateurs modernes refusent l'accès au micro depuis un contexte non sécurisé. <code>localhost</code> est la seule exception. Solution pour le casque : tunnel HTTPS via cloudflared.
+        </p>
+      </div>
+
+      <div class="check-item" data-answer="2">
+        <p>6. Le fallback dans <code>enrich_world_description</code> sert à quoi ?</p>
+        <ul class="check-choices">
+          <li><button type="button">à cacher les erreurs à Sentry</button></li>
+          <li><button type="button">à retry automatiquement</button></li>
+          <li><button type="button">à retomber sur la description brute si le LLM refuse, pour ne pas casser le flow</button></li>
+        </ul>
+        <p class="check-explain" hidden>
+          Le fallback transforme un crash 500 en une expérience dégradée mais fonctionnelle : Marble reçoit la description brute au lieu de l'enrichie et génère quand même un monde.
+        </p>
+      </div>
+    </div>
+
+    <p class="subnav-back">
+      <a href="index.html">← retour à la page de présentation</a>
+    </p>
+
+  </main>
+
+  <footer class="footer">
+    <p>
+      Ataraxia — cours pédagogique.
+      En cas de détresse, contacte le
+      <a href="tel:3114">3114</a> — écoute gratuite, 24 h/24.
+    </p>
+  </footer>
+
+  <script>
+    // Interaction QCM : au clic, on colore la bonne réponse en vert
+    // et la mauvaise en rouge, on affiche l'explication.
+    document.querySelectorAll(".check-item").forEach(item => {
+      const answer = parseInt(item.dataset.answer, 10);
+      const btns = item.querySelectorAll(".check-choices button");
+      const explain = item.querySelector(".check-explain");
+      btns.forEach((btn, idx) => {
+        btn.addEventListener("click", () => {
+          btns.forEach(b => { b.classList.remove("correct", "wrong"); b.disabled = false; });
+          if (idx === answer) {
+            btn.classList.add("correct");
+          } else {
+            btn.classList.add("wrong");
+            btns[answer].classList.add("correct");
+          }
+          if (explain) explain.hidden = false;
+        });
+      });
+    });
+  </script>
+</body>
+</html>
