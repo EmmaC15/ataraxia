@@ -251,6 +251,17 @@
       <h1>De quoi as-tu besoin<br>d'être écouté aujourd'hui&nbsp;?</h1>
       <p class="lede">Prends le temps qu'il te faut. Rien de ce qui est dit ne quitte cette pièce.</p>
       <ul class="themes" id="themes-list"></ul>
+      <div class="quick-mode-wrap">
+        <p class="quick-mode-hint">ou, si tu sais déjà où tu veux te poser :</p>
+        <button id="quick-mode-btn" class="quick-mode-btn" type="button">
+          <svg class="quick-mode-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <rect x="9" y="3" width="6" height="12" rx="3"/>
+            <path d="M5 11a7 7 0 0 0 14 0"/>
+            <path d="M12 18v3"/>
+          </svg>
+          <span>je décris directement mon lieu apaisant</span>
+        </button>
+      </div>
     </section>
 
     <!-- Écran 2 : séance — pas de bulle de texte du psy, il est LÀ dans la scène -->
@@ -288,6 +299,15 @@
           <blockquote class="world-desc" id="world-desc">…</blockquote>
           <dl class="details" id="world-details"></dl>
           <p class="stage-hint" id="reveal-hint">écoute-le, prends-le en toi…</p>
+          <button id="reveal-skip-btn" class="reveal-skip" type="button">passer cette étape</button>
+          <div class="reveal-actions" id="reveal-actions" hidden>
+            <button id="confirm-yes-btn" class="confirm-yes" type="button">
+              oui, lance mon monde
+            </button>
+            <button id="confirm-vocal-btn" class="confirm-vocal" type="button">
+              je redécris à la voix
+            </button>
+          </div>
         </div>
 
         <div class="stage-closed">
@@ -307,6 +327,7 @@
           <a id="world-enter" class="world-enter" href="#" target="_blank" rel="noopener noreferrer">
             Oui, j'y entre
           </a>
+          <button id="fullscreen-btn" class="fullscreen-btn" type="button">plein écran</button>
           <button id="restart-btn" class="restart" type="button">Commencer une autre séance</button>
         </div>
 

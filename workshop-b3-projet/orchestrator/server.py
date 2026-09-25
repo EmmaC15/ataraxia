@@ -29,7 +29,13 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from ai.conversation import PsySession
-from ai.prompts import TOURS_PAR_SEANCE, VOICE_TRANSCRIPTION_PROMPT, list_themes
+from ai.prompts import (
+    TOURS_PAR_SEANCE,
+    VOICE_TRANSCRIPTION_PROMPT,
+    build_recap_text,
+    classify_confirmation,
+    list_themes,
+)
 from marble.client import (
     MarbleAPIError,
     MarbleClient,
@@ -43,6 +49,7 @@ from voice import tts
 # ---------------------------------------------------------------------------
 
 app = FastAPI(title="Ataraxia")
+# reload marker
 WEB_DIR = Path(__file__).resolve().parent / "web"
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
@@ -50,6 +57,8 @@ _sessions: dict[str, PsySession] = {}
 _marble = MarbleClient()
 _worlds: dict[str, WorldRef] = {}
 _ready_audio_cache: dict[str, str] = {}
+# Description enrichie mise en pause entre /preview et /confirm.
+_pending_place: dict[str, dict] = {}
 
 
 INVITE_CLOSE_TEXT = (
@@ -119,6 +128,63 @@ class StartReq(BaseModel):
     theme: str
 
 
+QUICK_WELCOME_TEXT = (
+    "Bienvenue. Ferme les yeux si tu veux, prends une respiration. "
+    "Quand tu es prêt, décris-moi le lieu qui apaiserait vraiment ton cœur — "
+    "réel ou imaginaire, un souvenir, un endroit qui te ressemble. "
+    "Parle-moi de ce que tu y vois, ce que tu y entends, ce que tu y sens."
+)
+
+
+@app.post("/api/session/quick_start")
+async def quick_start() -> dict:
+    """Démarre une session 'mode rapide' — pas de dialogue psy.
+
+    L'utilisateur va directement décrire son lieu apaisant à la voix.
+    Retourne un audio d'accueil, puis l'appel suivant sera /set_place.
+    """
+    session = PsySession(theme="autre")  # type: ignore[arg-type]
+    sid = uuid.uuid4().hex
+    _sessions[sid] = session
+    return {
+        "session_id": sid,
+        "welcome_text": QUICK_WELCOME_TEXT,
+        "welcome_audio_b64": await _tts_b64(QUICK_WELCOME_TEXT),
+    }
+
+
+@app.post("/api/session/{sid}/set_place")
+async def set_place(sid: str, audio: UploadFile = File(...)) -> dict:
+    """Fast path : reçoit un blob audio décrivant le lieu et enrichit direct.
+
+    Court-circuite les tours de dialogue psy. Le résultat est le même que
+    /preview : description enrichie + recap audio pour confirmation vocale.
+    """
+    session = _sessions.get(sid)
+    if session is None:
+        raise HTTPException(404, "Session inconnue.")
+
+    data = await audio.read()
+    if not data:
+        raise HTTPException(400, "Audio vide.")
+    transcript = _transcribe_bytes(data, audio.filename or "audio.webm")
+    if not transcript:
+        raise HTTPException(400, "Je n'ai rien entendu.")
+
+    enriched = session.enrich_world_description(transcript)
+    _pending_place[sid] = enriched
+
+    recap_text = build_recap_text(enriched["description"])
+    recap_audio = await _tts_b64(recap_text)
+    return {
+        "user_text": transcript,
+        "description": enriched["description"],
+        "details": enriched["details"],
+        "recap_text": recap_text,
+        "recap_audio_b64": recap_audio,
+    }
+
+
 @app.post("/api/session/start")
 async def start(req: StartReq) -> dict:
     if req.theme not in list_themes():
@@ -186,9 +252,156 @@ async def reformulate(sid: str) -> dict:
     }
 
 
+async def _launch_world_generation(sid: str, enriched: dict) -> dict:
+    """Lance Marble avec la description enrichie et compose la réponse standard.
+
+    Réutilisé par `/finish` (compat legacy) et `/confirm` (nouveau flow C).
+    """
+    try:
+        world = _marble.generate_world(
+            enriched["description"],
+            details=enriched["details"],
+        )
+    except MarbleOutOfCreditsError as e:
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "code": "marble_out_of_credits",
+                "message": (
+                    "Le compte World Labs n'a plus de crédits pour générer un "
+                    "nouveau monde. Recharge sur "
+                    "https://platform.worldlabs.ai/billing puis réessaie."
+                ),
+                "upstream": e.detail,
+            },
+        )
+    except MarbleAPIError as e:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "marble_api_error",
+                "message": f"Marble a refusé la génération ({e.status_code}).",
+                "upstream": e.detail,
+            },
+        )
+    _worlds[world.world_id] = world
+    _pending_place.pop(sid, None)
+
+    desc_audio, close_audio = await asyncio.gather(
+        _tts_b64(enriched["description"]),
+        _tts_b64(INVITE_CLOSE_TEXT),
+    )
+    return {
+        "world_id": world.world_id,
+        "operation_id": world.operation_id,
+        "status": world.status,
+        "done": world.done,
+        "description": enriched["description"],
+        "details": enriched["details"],
+        "viewer_url": world.viewer_url,
+        "stub_mode": _marble.stub_mode,
+        "audio": {
+            "description_b64": desc_audio,
+            "close_b64": close_audio,
+        },
+        "invite_close_text": INVITE_CLOSE_TEXT,
+    }
+
+
+@app.post("/api/session/{sid}/preview")
+async def preview(sid: str) -> dict:
+    """Enrichit la description du lieu sans lancer Marble.
+
+    Retourne la description + un audio de recap ("est-ce bien ce lieu ?").
+    Marble n'est appelé qu'après confirmation via /confirm.
+    """
+    session = _sessions.get(sid)
+    if session is None:
+        raise HTTPException(404, "Session inconnue.")
+    if not session.is_finished():
+        raise HTTPException(400, "Séance non encore terminée.")
+
+    enriched = session.enrich_world_description(session.last_user_text())
+    _pending_place[sid] = enriched
+
+    recap_text = build_recap_text(enriched["description"])
+    recap_audio = await _tts_b64(recap_text)
+
+    return {
+        "description": enriched["description"],
+        "details": enriched["details"],
+        "recap_text": recap_text,
+        "recap_audio_b64": recap_audio,
+    }
+
+
+@app.post("/api/session/{sid}/confirm_yes")
+async def confirm_yes(sid: str) -> dict:
+    """Confirmation explicite sans audio : lance directement Marble.
+
+    Utilisé quand l'user clique le bouton "oui, lance mon monde" plutôt que
+    de parler. Même retour que /confirm (branche confirmée).
+    """
+    session = _sessions.get(sid)
+    if session is None:
+        raise HTTPException(404, "Session inconnue.")
+    pending = _pending_place.get(sid)
+    if pending is None:
+        raise HTTPException(400, "Aucun lieu en attente de confirmation.")
+
+    payload = await _launch_world_generation(sid, pending)
+    payload["confirmed"] = True
+    return payload
+
+
+@app.post("/api/session/{sid}/confirm")
+async def confirm_place(sid: str, audio: UploadFile = File(...)) -> dict:
+    """Reçoit la réponse audio après le recap.
+
+    - Si l'user confirme → lance Marble, retourne le payload complet (comme /finish).
+    - Sinon → réenrichit avec la nouvelle description, retourne un nouveau recap.
+    """
+    session = _sessions.get(sid)
+    if session is None:
+        raise HTTPException(404, "Session inconnue.")
+    pending = _pending_place.get(sid)
+    if pending is None:
+        raise HTTPException(400, "Aucun lieu en attente de confirmation.")
+
+    data = await audio.read()
+    if not data:
+        raise HTTPException(400, "Audio vide.")
+
+    transcript = _transcribe_bytes(data, audio.filename or "audio.webm")
+    intent = classify_confirmation(transcript)
+
+    if intent == "confirm":
+        payload = await _launch_world_generation(sid, pending)
+        payload["confirmed"] = True
+        payload["user_text"] = transcript
+        return payload
+
+    # reformulation : on relance l'enrichissement sur la nouvelle description
+    new_enriched = session.enrich_world_description(transcript)
+    _pending_place[sid] = new_enriched
+    recap_text = build_recap_text(new_enriched["description"])
+    recap_audio = await _tts_b64(recap_text)
+    return {
+        "confirmed": False,
+        "user_text": transcript,
+        "description": new_enriched["description"],
+        "details": new_enriched["details"],
+        "recap_text": recap_text,
+        "recap_audio_b64": recap_audio,
+    }
+
+
 @app.post("/api/session/{sid}/finish")
 async def finish(sid: str) -> dict:
-    """Enrichit la description et lance la génération Marble. Ne bloque PAS."""
+    """LEGACY — enrichit + lance Marble en un seul appel (sans recap).
+
+    Conservé pour compatibilité. Le nouveau flow utilise /preview + /confirm.
+    """
     session = _sessions.get(sid)
     if session is None:
         raise HTTPException(404, "Session inconnue.")

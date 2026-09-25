@@ -14,9 +14,9 @@ from __future__ import annotations
 import json
 from typing import Any, Literal
 
-Theme = Literal["anxiete", "stress", "humeur", "sommeil", "estime"]
+Theme = Literal["anxiete", "stress", "humeur", "sommeil", "estime", "autre"]
 
-TOURS_PAR_SEANCE = 11
+TOURS_PAR_SEANCE = 5
 TOUR_LIEU = TOURS_PAR_SEANCE  # dernier tour : question dédiée au lieu apaisant
 
 
@@ -46,6 +46,10 @@ OPENING_QUESTIONS: dict[Theme, str] = {
     "estime": (
         "Bonjour. Merci d'être venu. "
         "Comment tu te parles à toi-même, ces jours-ci ?"
+    ),
+    "autre": (
+        "Bonjour. Je suis là pour toi, sans agenda. "
+        "De quoi as-tu envie de parler aujourd'hui ?"
     ),
 }
 
@@ -120,25 +124,45 @@ def build_psy_system_prompt(theme: Theme) -> str:
 # ---------------------------------------------------------------------------
 
 WORLD_DESCRIPTION_SYSTEM_PROMPT = """Tu es le directeur artistique d'Ataraxia. \
-Tu reçois une intention brève d'un utilisateur et tu produis un objet JSON \
-complet, prêt à être envoyé à marble.worldlabs pour la génération d'un monde VR \
-apaisant.
+Tu reçois la description brute d'un lieu apaisant, prononcée par une personne \
+qui cherche à se poser, et tu produis un objet JSON complet prêt à être envoyé \
+à marble.worldlabs pour la génération d'un monde VR immersif.
+
+RÈGLE ABSOLUE, LA PLUS IMPORTANTE — LE LIEU EST CELUI DE LA PERSONNE :
+- Le lieu qu'elle nomme (café, grenier, atelier, phare, cathédrale, salon de sa \
+grand-mère, chambre d'enfance, grotte, hammam, chalet, verger, gare vide, \
+ruelle italienne, patio andalou, dune, île déserte, salle de musique, cabane \
+dans un arbre, chapelle, temple, cascade, bibliothèque, jardin japonais, \
+observatoire, quai la nuit, marché aux fleurs, N'IMPORTE QUOI) — c'est CE lieu, \
+exactement, que tu décris. TU NE LE REMPLACES JAMAIS par un lieu plus \
+"générique" comme une plage ou une forêt, sauf si elle-même a nommé une plage \
+ou une forêt.
+- Si sa description est vague (« un endroit calme », « quelque part de \
+paisible »), tu lui restitues UN lieu unique et non stéréotypé — évite le duo \
+plage/forêt par réflexe. Puise dans l'énorme diversité de lieux qui peuvent \
+apaiser un être humain (voir la liste au-dessus, non limitative).
+- Si elle mêle plusieurs indices (« quelque chose entre une bibliothèque et un \
+salon en hiver »), reste fidèle à ce mélange, ne tranche pas arbitrairement.
 
 Contraintes générales :
 - Français.
-- Fidèle à l'intention. Jamais d'élément angoissant, sombre, agressif, ni de \
-présence humaine non demandée.
-- Lumière douce, rythme lent, éléments naturels vivants mais paisibles.
-- Pas de marques, pas de personnes réelles, pas de lieux nommés existants.
+- Jamais d'élément angoissant, sombre, agressif, ni de présence humaine non \
+demandée.
+- Lumière douce, rythme lent, éléments vivants mais paisibles.
+- Pas de marques, pas de personnes réelles, pas de lieux nommés existants \
+(Paris, Everest, etc.).
 
 Tu réponds STRICTEMENT par un objet JSON valide, sans texte autour, avec la \
 structure suivante :
 {
-  "description": "<40 à 80 mots, une seule phrase continue, immersive, \
-convoquant au moins 4 sens : vue, ouïe, odorat, toucher/température>",
+  "description": "<40 à 80 mots, une seule phrase continue, immersive, ANCRÉE \
+DANS LE LIEU EXACT que la personne a nommé, convoquant au moins 4 sens : vue, \
+ouïe, odorat, toucher/température>",
   "details": {
-    "lieu_type": "<plage | foret | montagne | prairie | jardin | interieur | \
-espace | eau | autre>",
+    "lieu_type": "<le mot ou l'expression courte qui nomme le lieu tel qu'elle \
+l'a dit — reprends ses mots à elle (ex : 'grenier', 'café en terrasse', \
+'phare la nuit', 'atelier de peintre', 'chalet enneigé', 'ruelle italienne'). \
+Pas de catégorie forcée.>",
     "moment": "<aube | matin | midi | apres-midi | crepuscule | nuit>",
     "meteo": "<ensoleille | nuageux | brume | pluie douce | neige | ciel etoile \
 | autre>",
@@ -164,6 +188,53 @@ def build_world_description_messages(user_input: str) -> list[dict[str, str]]:
         {"role": "system", "content": WORLD_DESCRIPTION_SYSTEM_PROMPT},
         {"role": "user", "content": user_input.strip()},
     ]
+
+
+# ---------------------------------------------------------------------------
+# 3.b — Recap éloquent avant génération : le compagnon relit et demande confirmation
+# ---------------------------------------------------------------------------
+
+def build_recap_text(description: str) -> str:
+    """Petit texte parlé qui reformule le lieu et demande confirmation."""
+    d = description.strip().rstrip(".") if description else ""
+    return (
+        f"Voilà ce que ton esprit m'a dessiné : {d}. "
+        "Est-ce bien ce lieu-là que tu veux voir se réaliser ? "
+        "Réponds oui pour le confirmer — sinon redécris-moi celui que tu rêves vraiment."
+    )
+
+
+def classify_confirmation(transcript: str) -> str:
+    """Classe la réponse user en 'confirm' ou 'reformulate'.
+
+    Heuristique conservatrice : dans le doute → reformulate, car mieux vaut
+    demander deux fois qu'engager une génération Marble non voulue.
+    """
+    t = (transcript or "").strip().lower()
+    if not t:
+        return "reformulate"
+    # Modificateurs = reformulation (même si la phrase commence par "oui")
+    modifiers = (
+        "mais ", "plutôt", "plutot", "sauf ", "sans ", "avec plus",
+        "avec moins", "il faudrait", "j'aimerais", "j aimerais",
+        "je préfère", "je prefere", "je voudrais", "je souhaite",
+        "change", "non ",
+    )
+    for m in modifiers:
+        if m in t:
+            return "reformulate"
+    # Réponses courtes et clairement affirmatives
+    if len(t) < 40:
+        starts = (
+            "oui", "d'accord", "d accord", "ok", "okay", "parfait",
+            "exactement", "c'est ça", "c est ca", "c'est bien", "c est bien",
+            "allons", "génial", "genial", "impeccable", "vas-y", "vas y",
+            "allez", "on y va", "confirme",
+        )
+        for s in starts:
+            if t.startswith(s):
+                return "confirm"
+    return "reformulate"
 
 
 def parse_world_description(raw: str) -> dict[str, Any]:

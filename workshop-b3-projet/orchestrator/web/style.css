@@ -455,6 +455,114 @@ body.eyes-closed .topbar, body.eyes-closed .footlink { opacity: 0.5; }
 }
 .restart:hover { border-color: var(--terra); color: var(--terra); }
 
+.fullscreen-btn {
+  display: inline-block;
+  margin: 14px 8px 0;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  padding: 10px 18px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: border-color 200ms, color 200ms;
+}
+.fullscreen-btn:hover { border-color: var(--terra); color: var(--terra); }
+
+.reveal-skip {
+  display: inline-block;
+  margin: 22px auto 0;
+  background: transparent;
+  border: 1px dashed var(--line);
+  color: var(--ink-soft);
+  padding: 10px 20px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 200ms, border-color 200ms, color 200ms;
+}
+.reveal-skip:hover { opacity: 1; border-color: var(--terra); color: var(--terra); }
+
+.reveal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin: 24px auto 0;
+}
+.confirm-yes {
+  display: inline-block;
+  padding: 14px 28px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #f8ecd6;
+  border: none;
+  font: inherit;
+  font-size: 14.5px;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: transform 200ms, background 200ms;
+  box-shadow: var(--shadow-warm);
+}
+.confirm-yes:hover { transform: translateY(-1px); background: var(--terra); }
+.confirm-yes:disabled { opacity: 0.5; cursor: default; transform: none; }
+.confirm-vocal {
+  display: inline-block;
+  padding: 14px 24px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 14px;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition: border-color 200ms, color 200ms;
+}
+.confirm-vocal:hover { border-color: var(--terra); color: var(--terra); }
+.confirm-vocal:disabled { opacity: 0.5; cursor: default; }
+
+/* -------------------- Mode rapide (fast path) -------------------- */
+
+.quick-mode-wrap {
+  margin: 28px 0 4px;
+  padding-top: 22px;
+  border-top: 1px dashed var(--line);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.quick-mode-hint {
+  color: var(--ink-soft);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  margin: 0;
+  opacity: 0.85;
+}
+.quick-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  padding: 12px 22px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: border-color 200ms, color 200ms, background 200ms;
+}
+.quick-mode-btn:hover { border-color: var(--terra); color: var(--terra); background: rgba(0,0,0,0.02); }
+.quick-mode-ico { width: 18px; height: 18px; flex-shrink: 0; }
+
 /* -------------------- Footer -------------------- */
 
 .footlink {

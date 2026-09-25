@@ -10,12 +10,13 @@ const THEME_LABELS = {
   humeur:  "Humeur",
   sommeil: "Sommeil",
   estime:  "Estime de soi",
+  autre:   "Autre — j'en parle librement",
 };
 
 const state = {
   sessionId: null,
   worldId: null,
-  totalTurns: 10,
+  totalTurns: 5,
   recorder: null,
   chunks: [],
   recording: false,
@@ -23,6 +24,8 @@ const state = {
   vad: null,             // objet {cleanup, stopRecorder} pendant l'écoute auto
   pollingStarted: false,
   posture: "assis",      // "assis" | "couche"
+  pendingRevealSkip: null, // closure : que faire si on skip la phase "reveal"
+  mode: "psy",           // "psy" (dialogue en 5 tours) | "quick" (fast path direct)
 };
 
 const screens = {
@@ -87,9 +90,53 @@ async function startSession(theme) {
   if (!r.ok) { alert("Impossible de démarrer la séance."); return; }
   const data = await r.json();
   state.sessionId = data.session_id;
+  state.mode = "psy";
   showScreen("session");
+  document.getElementById("progress").hidden = false;
   updateProgress(0);
   displayPsy(data.psy_text, data.psy_audio_b64);
+}
+
+// ---------- Fast path : décrire directement son lieu ----------
+
+async function startQuickMode() {
+  let r;
+  try {
+    r = await fetch("/api/session/quick_start", { method: "POST" });
+  } catch (e) { alert("Impossible de démarrer le mode rapide."); return; }
+  if (!r.ok) { alert("Impossible de démarrer le mode rapide."); return; }
+  const data = await r.json();
+  state.sessionId = data.session_id;
+  state.mode = "quick";
+  showScreen("session");
+  // Pas de progress bar en mode rapide (pas de tours)
+  document.getElementById("progress").hidden = true;
+  // Bouton reformuler du dialogue psy n'a pas de sens ici
+  document.getElementById("reformulate-btn").hidden = true;
+  displayPsy(data.welcome_text, data.welcome_audio_b64);
+}
+
+document.getElementById("quick-mode-btn").addEventListener("click", startQuickMode);
+
+async function sendSetPlace(blob) {
+  const fd = new FormData();
+  fd.append("audio", blob, "place.webm");
+
+  let r;
+  try {
+    r = await fetch(`/api/session/${state.sessionId}/set_place`, { method: "POST", body: fd });
+  } catch (e) { setHint("problème réseau — clique le micro pour réessayer"); return; }
+  if (!r.ok) {
+    let payload = null;
+    try { payload = await r.json(); } catch (_) {}
+    const msg = (payload && payload.detail) || "le serveur n'a pas pu traiter — clique le micro";
+    setHint(typeof msg === "string" ? msg : "le serveur n'a pas pu traiter");
+    return;
+  }
+  const data = await r.json();
+  document.getElementById("user-text").textContent = data.user_text || "…";
+  // On enchaîne sur la boucle recap → confirmation vocale
+  showRecapAndListen(data);
 }
 
 // ---------- Progress dots ----------
@@ -285,6 +332,12 @@ function stopRecording() {
 // ---------- Envoi du tour ----------
 
 async function sendTurn(blob) {
+  // En mode rapide, on n'a pas de tours psy : on envoie directement à /set_place
+  // qui fait transcription + enrichissement, puis on rentre dans la boucle recap.
+  if (state.mode === "quick") {
+    return sendSetPlace(blob);
+  }
+
   const fd = new FormData();
   fd.append("audio", blob, "user.webm");
 
@@ -307,7 +360,7 @@ async function sendTurn(blob) {
   if (data.is_finished) {
     document.getElementById("reformulate-btn").hidden = true;
     setHint("merci. ton monde apaisant se dessine…");
-    await finishSession();
+    await startPreview();
     return;
   }
 
@@ -335,27 +388,262 @@ document.getElementById("reformulate-btn").addEventListener("click", async () =>
 
 // ---------- Fin de séance : révélation → yeux fermés → yeux ouverts ----------
 
-async function finishSession() {
+// ---------- Preview + Confirmation vocale ----------
+// Flow C (recap éloquent) : /preview renvoie une description + audio de recap,
+// puis on écoute la réponse user, /confirm classifie oui/non et soit lance Marble
+// soit re-enrichit et boucle. Le skip vocal (D) coupe le recap dès que l'user
+// commence à parler et enchaîne directement sur la capture de la réponse.
+
+async function startPreview() {
   let r;
   try {
-    r = await fetch(`/api/session/${state.sessionId}/finish`, { method: "POST" });
-  } catch (e) { alert("Erreur pendant la génération du monde."); return; }
+    r = await fetch(`/api/session/${state.sessionId}/preview`, { method: "POST" });
+  } catch (e) { alert("Erreur pendant la préparation du lieu."); return; }
+  if (!r.ok) { alert("Le serveur n'a pas pu préparer le lieu."); return; }
+  const data = await r.json();
+  showRecapAndListen(data);
+}
+
+function showRecapAndListen(data) {
+  showScreen("world");
+  setPhase("reveal");
+  document.getElementById("world-desc").textContent = data.description || "";
+  renderDetails(data.details || {});
+  const hint = document.getElementById("reveal-hint");
+  if (hint) hint.textContent = "écoute — tu choisis ensuite si tu confirmes ou si tu redécris.";
+
+  // Masque les boutons de choix pendant la lecture du recap
+  hideRevealActions();
+
+  playRecapAudio(data.recap_audio_b64, () => {
+    // Fin naturelle OU skip : on montre les 2 boutons de choix,
+    // sans ouvrir le micro automatiquement (le chat vocal est opt-in).
+    showRevealActions();
+  });
+}
+
+function showRevealActions() {
+  const actions = document.getElementById("reveal-actions");
+  if (actions) actions.hidden = false;
+  const skip = document.getElementById("reveal-skip-btn");
+  if (skip) skip.hidden = true; // plus utile une fois les actions visibles
+  const hint = document.getElementById("reveal-hint");
+  if (hint) hint.textContent = "à toi : oui pour lancer, ou redécris à la voix.";
+  // Réactive les boutons si désactivés au tour précédent
+  const yes = document.getElementById("confirm-yes-btn");
+  const vocal = document.getElementById("confirm-vocal-btn");
+  if (yes) yes.disabled = false;
+  if (vocal) vocal.disabled = false;
+}
+
+function hideRevealActions() {
+  const actions = document.getElementById("reveal-actions");
+  if (actions) actions.hidden = true;
+  const skip = document.getElementById("reveal-skip-btn");
+  if (skip) skip.hidden = false;
+}
+
+// Joue l'audio du recap. Un "fire" nettoie tout (audio + VAD passif éventuel)
+// et enchaîne sur onDone. Cette closure est exposée dans state.pendingRevealSkip
+// pour que le bouton "passer cette étape" puisse la déclencher.
+async function playRecapAudio(recapB64, onDone) {
+  let vadStream = null, vadCtx = null, vadInterval = null, fired = false;
+  const cleanup = () => {
+    try { if (vadInterval) clearInterval(vadInterval); } catch (_) {}
+    try { vadStream && vadStream.getTracks().forEach(t => t.stop()); } catch (_) {}
+    try { vadCtx && vadCtx.close(); } catch (_) {}
+    vadStream = null; vadCtx = null; vadInterval = null;
+  };
+  const fire = () => {
+    if (fired) return;
+    fired = true;
+    state.pendingRevealSkip = null;
+    cleanup();
+    if (state.currentAudio) {
+      try { state.currentAudio.pause(); } catch (_) {}
+      state.currentAudio = null;
+    }
+    setCompagnonSpeaking(false);
+    onDone();
+  };
+  state.pendingRevealSkip = fire;
+
+  // Skip vocal léger : si l'user parle pendant l'audio, on coupe (mais on
+  // n'ouvre plus le micro automatiquement — il choisira son bouton).
+  try {
+    vadStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+    vadCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = vadCtx.createMediaStreamSource(vadStream);
+    const analyser = vadCtx.createAnalyser();
+    analyser.fftSize = 512;
+    src.connect(analyser);
+    const buf = new Float32Array(analyser.fftSize);
+
+    const SKIP_THRESHOLD = 0.03;
+    const NEEDED_MS = 250;
+    const IGNORE_MS = 600;
+    const startAt = Date.now();
+    let speakSince = null;
+
+    vadInterval = setInterval(() => {
+      if (Date.now() - startAt < IGNORE_MS) return;
+      analyser.getFloatTimeDomainData(buf);
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+      const rms = Math.sqrt(sum / buf.length);
+      if (rms > SKIP_THRESHOLD) {
+        if (!speakSince) speakSince = Date.now();
+        else if (Date.now() - speakSince > NEEDED_MS) {
+          fire();
+        }
+      } else {
+        speakSince = null;
+      }
+    }, 80);
+  } catch (e) {
+    console.warn("skip vocal non disponible :", e);
+  }
+
+  playAudioB64(recapB64, () => fire());
+}
+
+// Bouton "oui, lance mon monde" : confirmation explicite, pas d'audio
+document.getElementById("confirm-yes-btn").addEventListener("click", async () => {
+  const yes = document.getElementById("confirm-yes-btn");
+  const vocal = document.getElementById("confirm-vocal-btn");
+  if (yes) yes.disabled = true;
+  if (vocal) vocal.disabled = true;
+  const hint = document.getElementById("reveal-hint");
+  if (hint) hint.textContent = "ton monde se prépare…";
+  let r;
+  try {
+    r = await fetch(`/api/session/${state.sessionId}/confirm_yes`, { method: "POST" });
+  } catch (e) { alert("problème réseau"); if (yes) yes.disabled = false; if (vocal) vocal.disabled = false; return; }
   if (!r.ok) {
     let payload = null;
-    try { payload = await r.json(); } catch (_) { payload = null; }
+    try { payload = await r.json(); } catch (_) {}
+    const detail = payload && payload.detail;
+    const code = detail && typeof detail === "object" ? detail.code : null;
+    const msg = (detail && typeof detail === "object" && detail.message) ||
+                (typeof detail === "string" ? detail : null) ||
+                "Le serveur n'a pas pu confirmer.";
+    if (code === "marble_out_of_credits") {
+      showWorldError("Crédits Marble épuisés", msg, "https://platform.worldlabs.ai/billing");
+    } else if (code === "marble_api_error") {
+      showWorldError("Marble a refusé la génération", msg, null);
+    } else {
+      alert(msg);
+    }
+    if (yes) yes.disabled = false;
+    if (vocal) vocal.disabled = false;
+    return;
+  }
+  const data = await r.json();
+  state.worldId = data.world_id;
+  const closeB64 = data.audio && data.audio.close_b64;
+  goToClosedPhase(closeB64, data.stub_mode, data.status, data.viewer_url, null);
+});
+
+// Bouton "je redécris à la voix" : opt-in du micro pour reformulation
+document.getElementById("confirm-vocal-btn").addEventListener("click", () => {
+  hideRevealActions();
+  listenForConfirmation();
+});
+
+async function listenForConfirmation() {
+  const hint = document.getElementById("reveal-hint");
+  if (hint) hint.textContent = "je t'écoute…";
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+  } catch (e) {
+    if (hint) hint.textContent = "micro refusé — recharge la page pour réautoriser";
+    return;
+  }
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const source = audioCtx.createMediaStreamSource(stream);
+  const analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 512;
+  source.connect(analyser);
+
+  const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+    ? "audio/webm;codecs=opus" : "audio/webm";
+  const recorder = new MediaRecorder(stream, { mimeType });
+  const chunks = [];
+  recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+
+  const dataArray = new Float32Array(analyser.fftSize);
+  let hasSpoken = false, speakStart = null, silentSince = null;
+  const startTime = Date.now();
+
+  const cleanup = () => {
+    try { clearInterval(interval); } catch (_) {}
+    try { stream.getTracks().forEach(t => t.stop()); } catch (_) {}
+    try { audioCtx.close(); } catch (_) {}
+  };
+
+  const interval = setInterval(() => {
+    analyser.getFloatTimeDomainData(dataArray);
+    let sum = 0;
+    for (let i = 0; i < dataArray.length; i++) sum += dataArray[i] * dataArray[i];
+    const rms = Math.sqrt(sum / dataArray.length);
+    const now = Date.now();
+    if (rms > SPEAK_THRESHOLD) {
+      if (!hasSpoken) { hasSpoken = true; speakStart = now; }
+      silentSince = null;
+    } else if (hasSpoken) {
+      if (!silentSince) silentSince = now;
+      else if (now - silentSince > SILENCE_MS && now - speakStart > MIN_SPEAK_MS) {
+        cleanup();
+        try { recorder.stop(); } catch (_) {}
+      }
+    }
+    if (now - startTime > MAX_MS) {
+      cleanup();
+      try { recorder.stop(); } catch (_) {}
+    }
+  }, CHECK_MS);
+
+  recorder.onstop = async () => {
+    cleanup();
+    if (!hasSpoken) {
+      if (hint) hint.textContent = "je n'ai rien entendu — dis oui, ou redécris ton lieu";
+      // Laisse le user retenter via le bouton visuel
+      return;
+    }
+    if (hint) hint.textContent = "un instant…";
+    const blob = new Blob(chunks, { type: mimeType });
+    await sendConfirmation(blob);
+  };
+
+  recorder.start(200);
+}
+
+async function sendConfirmation(blob) {
+  const fd = new FormData();
+  fd.append("audio", blob, "confirm.webm");
+  let r;
+  try {
+    r = await fetch(`/api/session/${state.sessionId}/confirm`, { method: "POST", body: fd });
+  } catch (e) {
+    alert("problème réseau pendant la confirmation");
+    return;
+  }
+  if (!r.ok) {
+    let payload = null;
+    try { payload = await r.json(); } catch (_) {}
     const detail = payload && payload.detail;
     const code = detail && typeof detail === "object" ? detail.code : null;
     const msg =
       (detail && typeof detail === "object" && detail.message) ||
       (typeof detail === "string" ? detail : null) ||
-      "Le serveur n'a pas pu créer le monde.";
-    console.error("Finish error", r.status, payload);
+      "Le serveur n'a pas pu confirmer le lieu.";
     if (code === "marble_out_of_credits") {
-      showWorldError(
-        "Crédits Marble épuisés",
-        msg,
-        "https://platform.worldlabs.ai/billing"
-      );
+      showWorldError("Crédits Marble épuisés", msg, "https://platform.worldlabs.ai/billing");
     } else if (code === "marble_api_error") {
       showWorldError("Marble a refusé la génération", msg, null);
     } else {
@@ -363,21 +651,50 @@ async function finishSession() {
     }
     return;
   }
-  const w = await r.json();
-  state.worldId = w.world_id;
+  const data = await r.json();
 
-  showScreen("world");
-  setPhase("reveal");
-  document.getElementById("world-desc").textContent = w.description || "";
-  renderDetails(w.details || {});
+  if (data.confirmed) {
+    // Lieu validé → Marble a été appelé, on passe à la phase closed / polling
+    state.worldId = data.world_id;
+    const closeB64 = data.audio && data.audio.close_b64;
+    goToClosedPhase(closeB64, data.stub_mode, data.status, data.viewer_url, null);
+    return;
+  }
 
-  const closeB64 = w.audio && w.audio.close_b64;
-  const descB64 = w.audio && w.audio.description_b64;
-
-  playAudioB64(descB64, () => {
-    goToClosedPhase(closeB64, w.stub_mode, w.status, w.viewer_url, null);
-  });
+  // Sinon : reformulation. La réponse de l'user devient la nouvelle description
+  // → on affiche le nouveau recap et on ré-écoute.
+  showRecapAndListen(data);
 }
+
+document.getElementById("reveal-skip-btn").addEventListener("click", () => {
+  // fire() gère audio.pause + cleanup VAD + onDone (qui affiche les 2 boutons).
+  if (state.pendingRevealSkip) state.pendingRevealSkip();
+});
+
+// ---------- Plein écran (utile sur casque VR) ----------
+
+function toggleFullscreen() {
+  const el = document.documentElement;
+  const isFs = document.fullscreenElement || document.webkitFullscreenElement;
+  if (isFs) {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if (exit) exit.call(document);
+  } else {
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (req) req.call(el).catch(err => console.warn("fullscreen refusé :", err));
+  }
+}
+
+document.getElementById("fullscreen-btn").addEventListener("click", toggleFullscreen);
+
+function updateFullscreenLabel() {
+  const btn = document.getElementById("fullscreen-btn");
+  if (!btn) return;
+  const isFs = document.fullscreenElement || document.webkitFullscreenElement;
+  btn.textContent = isFs ? "quitter le plein écran" : "plein écran";
+}
+document.addEventListener("fullscreenchange", updateFullscreenLabel);
+document.addEventListener("webkitfullscreenchange", updateFullscreenLabel);
 
 function goToClosedPhase(closeAudioB64, stubMode, initialStatus, initialViewerUrl, initialThumb) {
   setPhase("closed");
@@ -494,10 +811,16 @@ document.getElementById("restart-btn").addEventListener("click", () => {
   state.sessionId = null;
   state.worldId = null;
   state.pollingStarted = false;
+  state.mode = "psy";
+  state.pendingRevealSkip = null;
   document.body.classList.remove("eyes-closed");
   document.getElementById("user-text").textContent = "—";
   document.getElementById("sentiment").hidden = true;
   document.getElementById("reformulate-btn").hidden = true;
+  document.getElementById("progress").hidden = false;
+  // reset des boutons du recap
+  document.getElementById("reveal-actions").hidden = true;
+  document.getElementById("reveal-skip-btn").hidden = false;
   showScreen("theme");
 });
 

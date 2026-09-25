@@ -162,11 +162,27 @@ class PsySession:
         return new_text
 
     def enrich_world_description(self, user_input: str) -> dict:
-        """Transforme la description brute en {description, details} pour marble."""
-        msgs = build_world_description_messages(user_input)
-        # On demande explicitement du JSON via response_format quand le modèle le supporte.
-        raw = self._chat(msgs, temperature=0.8, json_mode=True)
-        return parse_world_description(raw)
+        """Transforme la description brute en {description, details} pour marble.
+
+        Tolérant : si le LLM refuse (safety) ou renvoie un JSON invalide, on
+        retombe sur la description brute de l'utilisateur. Marble accepte des
+        prompts textes simples, donc le flow continue au lieu de crasher en 500.
+        """
+        text = (user_input or "").strip()
+        if not text:
+            return {"description": "", "details": {}}
+        try:
+            msgs = build_world_description_messages(text)
+            raw = self._chat(msgs, temperature=0.8, json_mode=True)
+            parsed = parse_world_description(raw)
+            if not parsed.get("description"):
+                return {"description": text, "details": {}}
+            return parsed
+        except Exception as e:
+            # Cas typiques : groq.BadRequestError json_validate_failed
+            # (le modèle a refusé et renvoyé du texte), timeout, quota.
+            print(f"[enrich] fallback description brute — {type(e).__name__}: {e}")
+            return {"description": text, "details": {}}
 
     # ------------------------------------------------------------------
     # Appels Groq
